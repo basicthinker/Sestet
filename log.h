@@ -33,6 +33,12 @@ static inline struct segment *seg_new() {
   struct segment *seg = (struct segment *)MALLOC(sizeof(struct segment));
   seg->prev = seg->next = 0;
   spin_lock_init(&seg->lock);
+  return seg;
+}
+
+static inline void seg_free(struct segment *seg) {
+  spin_lock_destroy(seg->lock);
+  MFREE(seg);
 }
 
 struct log_pos { // only for internal use
@@ -87,9 +93,9 @@ static inline void log_free(struct rffs_log *log) {
   struct segment *seg = begin;
   while (seg->next != begin) {
     seg = seg->next;
-    MFREE(seg->prev);
+    seg_free(seg->prev);
   }
-  MFREE(seg);
+  seg_free(seg);
 
   MFREE(log);
 }
