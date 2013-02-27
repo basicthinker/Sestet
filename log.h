@@ -45,8 +45,38 @@ static inline void seg_free(struct segment *seg) {
   MFREE(seg);
 }
 
-static inline unsigned int seg_len(struct segment *seg) {
+static inline unsigned int __seg_len(struct segment *seg) {
   return seg->seg_end - seg->seg_begin - 1;
+}
+
+static inline unsigned int seg_len(struct segment *seg) {
+  unsigned int len;
+  spin_lock(&seg->lock);
+  len = __seg_len(seg);
+  spin_unlock(&seg->lock);
+  return len;
+}
+
+static inline unsigned int __seg_append(struct segment *seg,
+                                        struct seg_entry *entry) {
+  if (seg->seg_end < SEG_LEN) {
+    seg->entries[seg->seg_end] = *entry;
+    return ++seg->seg_end;
+  } else if (seg->seg_end == SEG_LEN) {
+    return 0;
+  } else {
+    ERR_PRINT("[__seg_append] Out of index.");
+    return 0;
+  }
+}
+
+static inline unsigned int seg_append(struct segment *seg,
+                                      struct seg_entry *entry) {
+  unsigned int new_end;
+  spin_lock(&seg->lock);
+  new_end = __seg_append(seg, entry);
+  spin_unlock(&seg->lock);
+  return new_end;
 }
 
 struct rffs_log {
@@ -98,6 +128,10 @@ static inline void log_add_seg(struct rffs_log *log) {
 }
 
 static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
+  struct segment *end_seg = log->log_end;
+  spin_lock(&end_seg->lock);
+  
+  spin_unlock(&end_seg->lock);
 }
 
 struct log_pos { // only for internal use

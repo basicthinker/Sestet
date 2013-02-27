@@ -42,4 +42,10 @@
 #endif // Mac OS
 #endif // Linux kernel
 
+#ifdef __linux__
+  #define ERR_PRINT(str) // TODO
+#else
+  #define ERR_PRINT(str) // TODO
+#endif
+
 #endif
