@@ -26,37 +26,17 @@ struct segment {
   struct segment *prev;
   struct segment *next;
   unsigned int seq_num;
-  unsigned int seg_begin;
-  unsigned int seg_end;
 };
 
-static inline struct segment *seg_new() {
+static inline struct segment *seg_new(unsigned int seq_num) {
   struct segment *seg = (struct segment *)MALLOC(sizeof(struct segment));
   seg->prev = seg->next = 0;
-  seg->seg_begin = 0xFFFFFFFF;
-  seg->seg_end = 0;
+  seg->seq_num = seq_num;
   return seg;
 }
 
 static inline void seg_free(struct segment *seg) {
   MFREE(seg);
-}
-
-static inline unsigned int seg_len(struct segment *seg) {
-  return seg->seg_end - seg->seg_begin - 1;
-}
-
-static inline unsigned int seg_append_entry(struct segment *seg,
-                                            struct seg_entry *entry) {
-  if (seg->seg_end < SEG_LEN) {
-    seg->entries[seg->seg_end] = *entry;
-    return ++seg->seg_end;
-  } else if (seg->seg_end == SEG_LEN) {
-    return 0;
-  } else {
-    ERR_PRINT("[__seg_append] Out of index.");
-    return 0;
-  }
 }
 
 static inline void seg_insert(struct segment *prev_seg) {
@@ -69,20 +49,26 @@ static inline void seg_insert(struct segment *prev_seg) {
   new_seg->next = next_seg;
 }
 
+struct log_pos { // only for internal use
+  struct segment *seg;
+  unsigned int entry;
+};
+
 struct rffs_log {
-  struct segment *log_begin;
-  struct segment *log_end;
+  struct log_pos log_begin; // begin of sealed entries
+  struct log_pos log_head; // begin of active entries
+  struct log_pos log_end;
   spinlock_t lock;
 };
 
 static inline struct rffs_log *log_new() {
-  struct segment *seg = seg_new();
+  struct segment *seg = seg_new(0);
   struct rffs_log *log = (struct rffs_log *)MALLOC(sizeof(struct rffs_log));
 
-  seg->seq_num = 0;
   seg->prev = seg->next = seg;
 
-  log->log_begin = log->log_end = seg;
+  log->log_begin.seg = log->log_head.seg = log->log_end.seg = seg;
+  log->log_begin.entry = log->log_head.entry = log->log_end.entry = 0;
   spin_lock_init(&log->lock);
   return log;
 }
@@ -102,14 +88,17 @@ static inline void log_free(struct rffs_log *log) {
 static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
   struct segment *end_seg = log->log_end;
   spin_lock(&log->lock);
-
+    if (seg->seg_end < SEG_LEN) {
+    seg->entries[seg->seg_end] = *entry;
+    return ++seg->seg_end;
+  } else if (seg->seg_end == SEG_LEN) {
+    return 0;
+  } else {
+    ERR_PRINT("[__seg_append] Out of index.");
+    return 0;
+  }
   spin_unlock(&log->lock);
 }
-
-struct log_pos { // only for internal use
-  struct segment *seg;
-  unsigned int entry;
-};
 
 void log_seal(struct rffs_log *log,
               struct log_pos *trans_begin, // output
