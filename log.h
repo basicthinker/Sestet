@@ -28,7 +28,6 @@ struct segment {
   unsigned int seq_num;
   unsigned int seg_begin;
   unsigned int seg_end;
-  spinlock_t lock;
 };
 
 static inline struct segment *seg_new() {
@@ -36,29 +35,19 @@ static inline struct segment *seg_new() {
   seg->prev = seg->next = 0;
   seg->seg_begin = 0xFFFFFFFF;
   seg->seg_end = 0;
-  spin_lock_init(&seg->lock);
   return seg;
 }
 
 static inline void seg_free(struct segment *seg) {
-  spin_lock_destroy(seg->lock);
   MFREE(seg);
 }
 
-static inline unsigned int __seg_len(struct segment *seg) {
+static inline unsigned int seg_len(struct segment *seg) {
   return seg->seg_end - seg->seg_begin - 1;
 }
 
-static inline unsigned int seg_len(struct segment *seg) {
-  unsigned int len;
-  spin_lock(&seg->lock);
-  len = __seg_len(seg);
-  spin_unlock(&seg->lock);
-  return len;
-}
-
-static inline unsigned int __seg_append(struct segment *seg,
-                                        struct seg_entry *entry) {
+static inline unsigned int seg_append_entry(struct segment *seg,
+                                            struct seg_entry *entry) {
   if (seg->seg_end < SEG_LEN) {
     seg->entries[seg->seg_end] = *entry;
     return ++seg->seg_end;
@@ -70,18 +59,20 @@ static inline unsigned int __seg_append(struct segment *seg,
   }
 }
 
-static inline unsigned int seg_append(struct segment *seg,
-                                      struct seg_entry *entry) {
-  unsigned int new_end;
-  spin_lock(&seg->lock);
-  new_end = __seg_append(seg, entry);
-  spin_unlock(&seg->lock);
-  return new_end;
+static inline void seg_insert(struct segment *prev_seg) {
+  struct segment *new_seg = seg_new();
+  struct segment *next_seg = prev_seg->next;
+
+  prev_seg->next = new_seg;
+  new_seg->prev = prev_seg;
+  next_seg->prev = new_seg;
+  new_seg->next = next_seg;
 }
 
 struct rffs_log {
   struct segment *log_begin;
   struct segment *log_end;
+  spinlock_t lock;
 };
 
 static inline struct rffs_log *log_new() {
@@ -92,6 +83,7 @@ static inline struct rffs_log *log_new() {
   seg->prev = seg->next = seg;
 
   log->log_begin = log->log_end = seg;
+  spin_lock_init(&log->lock);
   return log;
 }
 
@@ -103,35 +95,15 @@ static inline void log_free(struct rffs_log *log) {
   }
   seg_free(seg);
 
+  spin_lock_destroy(&log->lock);
   MFREE(log);
-}
-
-static inline void log_add_seg(struct rffs_log *log) {
-  struct segment *new_seg = seg_new();
-  struct segment *prev_seg = log->log_begin->prev;
-  struct segment *next_seg = prev_seg->next;
-  
-  spin_lock(&prev_seg->lock);
-  if (prev_seg != next_seg) {
-    spin_lock(&next_seg->lock);
-  }
-  
-  prev_seg->next = new_seg;
-  new_seg->prev = prev_seg;
-  next_seg->prev = new_seg;
-  new_seg->next = next_seg;
-  
-  spin_unlock(&prev_seg->lock);
-  if (prev_seg != next_seg) {
-    spin_unlock(&next_seg->lock);
-  }
 }
 
 static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
   struct segment *end_seg = log->log_end;
-  spin_lock(&end_seg->lock);
-  
-  spin_unlock(&end_seg->lock);
+  spin_lock(&log->lock);
+
+  spin_unlock(&log->lock);
 }
 
 struct log_pos { // only for internal use
