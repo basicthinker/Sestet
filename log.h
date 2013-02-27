@@ -39,14 +39,16 @@ static inline void seg_free(struct segment *seg) {
   MFREE(seg);
 }
 
-static inline void seg_insert(struct segment *prev_seg) {
-  struct segment *new_seg = seg_new();
+static inline struct segment *seg_insert(struct segment *prev_seg) {
+  struct segment *new_seg = seg_new(prev_seg->seq_num + 1);
   struct segment *next_seg = prev_seg->next;
 
   prev_seg->next = new_seg;
   new_seg->prev = prev_seg;
   next_seg->prev = new_seg;
   new_seg->next = next_seg;
+
+  return new_seg;
 }
 
 struct log_pos { // only for internal use
@@ -74,8 +76,8 @@ static inline struct rffs_log *log_new() {
 }
 
 static inline void log_free(struct rffs_log *log) {
-  struct segment *seg = log->log_begin;
-  while (seg->next != log->log_begin) {
+  struct segment *seg = log->log_begin.seg;
+  while (seg->next != log->log_begin.seg) {
     seg = seg->next;
     seg_free(seg->prev);
   }
@@ -86,26 +88,34 @@ static inline void log_free(struct rffs_log *log) {
 }
 
 static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
-  struct segment *end_seg = log->log_end;
+  struct log_pos *end;
   spin_lock(&log->lock);
-    if (seg->seg_end < SEG_LEN) {
-    seg->entries[seg->seg_end] = *entry;
-    return ++seg->seg_end;
-  } else if (seg->seg_end == SEG_LEN) {
-    return 0;
+  end = &log->log_end;
+  if (end->entry < SEG_LEN) {
+    end->seg->entries[end->entry] = *entry;
+    ++end->entry;
+  } else if (end->entry == SEG_LEN) {
+    end->seg = seg_insert(end->seg);
+    end->seg->entries[0] = *entry;
+    end->entry = 1;
   } else {
-    ERR_PRINT("[__seg_append] Out of index.");
-    return 0;
+    ERR_PRINT("[log_append] Out of index.");
   }
   spin_unlock(&log->lock);
 }
 
-void log_seal(struct rffs_log *log,
-              struct log_pos *trans_begin, // output
-              struct log_pos *trans_end); // output
+static inline void log_seal(struct rffs_log *log,
+                            struct log_pos *trans_begin, // output
+                            struct log_pos *trans_end) { // output
+  spin_lock(&log->lock);
+  *trans_begin = log->log_head;
+  *trans_end = log->log_end;
+  log->log_head = log->log_end;
+  spin_unlock(&log->lock);
+}
 
 // Returns sorted array of pointers to seg_entry
-void *log_sort(struct log_pos *begin, struct log_pos *end,
-               int *length); // output
+extern struct seg_entry **log_sort(struct log_pos *begin, struct log_pos *end,
+    int *length); // output
 
 #endif
