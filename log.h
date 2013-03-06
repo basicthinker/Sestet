@@ -115,7 +115,7 @@ static inline void log_seal(struct rffs_log *log,
 }
 
 // Returns sorted array of pointers to seg_entry
-extern struct seg_entry **log_sort(struct log_pos *begin, struct log_pos *end,
-    int *length); // output
+extern struct seg_entry **log_sort(const struct log_pos *begin, const struct log_pos *end,
+    unsigned int *length); // output
 
 #endif
