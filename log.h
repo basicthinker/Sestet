@@ -11,7 +11,7 @@
 
 #include "sys.h"
 
-#define SEG_LEN 1024 // 1k
+#define SEG_LEN 4096 // 1k
 #define CHUNK_SIZE 4096 // 512 bytes
 
 struct seg_entry {

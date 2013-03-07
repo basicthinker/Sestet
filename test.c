@@ -7,8 +7,14 @@
 //
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "log.h"
+
+#define RAND_CHUNK (rand() % 1024)
+#define RAND_INODE (rand() % 1024)
+
+//#define ALLOC_DATA
 
 int main(int argc, const char *argv[]) {
   struct rffs_log *log = log_new();
@@ -19,10 +25,14 @@ int main(int argc, const char *argv[]) {
 
   // test copy within one segment
   for (; i < SEG_LEN / 2; ++i) {
-    entry.chunk_begin = i;
-    entry.chunk_end = i + 1;
+    entry.chunk_begin = RAND_CHUNK;
+    entry.chunk_end = entry.chunk_begin + RAND_CHUNK + 1;
+#ifdef ALLOC_DATA
+    entry.data = MALLOC((entry.chunk_end - entry.chunk_begin) * 512);
+#else
     entry.data = 0;
-    entry.inode_id = i;
+#endif
+    entry.inode_id = RAND_INODE;
     log_append(log, &entry);
   }
   log_seal(log, &begin, &end);
@@ -38,10 +48,14 @@ int main(int argc, const char *argv[]) {
 
   // test copy cross two segments
   for (; i < SEG_LEN + SEG_LEN / 2; ++i) {
-    entry.chunk_begin = i;
-    entry.chunk_end = i + 1;
+    entry.chunk_begin = RAND_CHUNK;
+    entry.chunk_end = entry.chunk_begin + RAND_CHUNK;
+#ifdef ALLOC_DATA
+    entry.data = MALLOC((entry.chunk_end - entry.chunk_begin) * 512);
+#else
     entry.data = 0;
-    entry.inode_id = i;
+#endif
+    entry.inode_id = RAND_INODE;
     log_append(log, &entry);
   }
   log_seal(log, &begin, &end);
@@ -56,11 +70,15 @@ int main(int argc, const char *argv[]) {
   entry_array_clear(&arr);
   
   // test copy cross multiple segments
-  for (; i < SEG_LEN * 4 + SEG_LEN / 2; ++i) {
-    entry.chunk_begin = i;
-    entry.chunk_end = i + 1;
+  for (; i < SEG_LEN * 8 + SEG_LEN / 2; ++i) {
+    entry.chunk_begin = RAND_CHUNK;
+    entry.chunk_end = entry.chunk_begin + RAND_CHUNK;
+#ifdef ALLOC_DATA
+    entry.data = MALLOC((entry.chunk_end - entry.chunk_begin) * 512);
+#else
     entry.data = 0;
-    entry.inode_id = i;
+#endif
+    entry.inode_id = RAND_INODE;
     log_append(log, &entry);
   }
   log_seal(log, &begin, &end);
