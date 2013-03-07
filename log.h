@@ -11,7 +11,7 @@
 
 #include "sys.h"
 
-#define SEG_LEN 10240 // 10k
+#define SEG_LEN 1024 // 1k
 #define CHUNK_SIZE 4096 // 512 bytes
 
 struct seg_entry {
@@ -49,6 +49,21 @@ static inline struct segment *seg_insert(struct segment *prev_seg) {
   new_seg->next = next_seg;
 
   return new_seg;
+}
+
+struct entry_array {
+  struct seg_entry **entries;
+  unsigned int len;
+};
+
+static void entry_array_init(struct entry_array *arr, unsigned int len) {
+  arr->len = len;
+  arr->entries = (struct seg_entry **)MALLOC(len * sizeof(struct seg_entry));
+}
+
+static void entry_array_clear(struct entry_array *arr) {
+  MFREE(arr->entries);
+  arr->len = 0;
 }
 
 struct log_pos { // only for internal use
@@ -114,8 +129,9 @@ static inline void log_seal(struct rffs_log *log,
   spin_unlock(&log->lock);
 }
 
-// Returns sorted array of pointers to seg_entry
-extern struct seg_entry **log_sort(const struct log_pos *begin, const struct log_pos *end,
-    unsigned int *length); // output
+// Returns sorted array of pointers to seg_entry,
+// which should be deallocated in log_flush().
+extern struct entry_array log_sort(const struct log_pos *begin,
+    const struct log_pos *en);
 
 #endif

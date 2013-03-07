@@ -15,18 +15,21 @@ static void copy_entries(const struct log_pos *begin, const struct log_pos *end,
     struct seg_entry *entries[]) {
   unsigned int i = 0;
   unsigned int len = 0;
+  struct seg_entry *base;
   if (begin->seg == end->seg) {
     len = end->entry - begin->entry;
+    base = begin->seg->entries + begin->entry;
     for (i = 0; i < len; ++i) {
-      entries[i] = (struct seg_entry *)begin->seg + i;
+      entries[i] = base + i;
     }
   } else {
     struct segment *seg;
     unsigned int j = 0;
     i = 0;
     len = SEG_LEN - begin->entry;
+    base = begin->seg->entries + begin->entry;
     for (; i < len; ++i) {
-      entries[i] = begin->seg->entries + i;
+      entries[i] = base + i;
     }
     for (seg = begin->seg->next; seg != end->seg; seg = seg->next) {
       len += SEG_LEN;
@@ -41,15 +44,13 @@ static void copy_entries(const struct log_pos *begin, const struct log_pos *end,
   }
 }
 
-struct seg_entry **log_sort(const struct log_pos *begin,
-    const struct log_pos *end,
-    unsigned int *length) { // output
+struct entry_array log_sort(const struct log_pos *begin,
+    const struct log_pos *end) {
   const unsigned int len = (SEG_LEN - begin->entry) + end->entry + 
       SEG_LEN * (end->seg->seq_num - begin->seg->seq_num - 1);
-  struct seg_entry **entries = (struct seg_entry **)MALLOC(len * sizeof(struct seg_entry));
-  copy_entries(begin, end, entries);
-  sort_entries(entries, len);
-
-  *length = len;
-  return entries;
+  struct entry_array arr;
+  entry_array_init(&arr, len);
+  copy_entries(begin, end, arr.entries);
+  sort_entries(arr.entries, len);
+  return arr;
 }
