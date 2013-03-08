@@ -8,7 +8,7 @@
 
 #include "log.h"
 
-#define CUTOFF 0
+#define CUTOFF 4
 #define STACK_SIZE 32
 
 #define SWAP_ENTRY(a, b) {  \
@@ -34,7 +34,7 @@ static void short_sort(struct seg_entry *entries[],
   }
   for (sort = end - 1; sort > begin; --sort) {
     max = sort;
-    for (i = 0; i < sort; ++i) {
+    for (i = begin; i < sort; ++i) {
       if (comp_entry(entries[i], entries[max]) > 0) {
         max = i;
       }
