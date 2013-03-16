@@ -9,9 +9,10 @@
 #ifndef SESTET_RFFS_SYS_H_
 #define SESTET_RFFS_SYS_H_
 
-#ifdef __linux__ // Linux kernel space
-  #define MALLOC(size) // TODO
-  #define MFREE(size) // TODO
+#ifdef __KERNEL__ // Linux kernel space
+  #include <linux/slab.h>
+  #define MALLOC(size) kmalloc(size, GFP_KERNEL)
+  #define MFREE(size) kfree(size)
 #else
   #include <stdlib.h>
   #define MALLOC(size) malloc(size)
@@ -22,7 +23,8 @@
   #define inline __inline
 #endif
 
-#ifdef __linux__
+#ifdef __KERNEL__
+  #include <linux/spinlock.h>
   #define spin_lock_destroy(lock)
 #else
   #include <pthread.h>
@@ -42,7 +44,7 @@
 #endif // Mac OS
 #endif // Linux kernel
 
-#ifdef __linux__
+#ifdef __KERNEL__
   #define ERR_PRINT(str) // TODO
 #else
   #define ERR_PRINT(str) // TODO

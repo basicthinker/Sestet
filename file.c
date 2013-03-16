@@ -12,9 +12,8 @@
 
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/rffs.h>
 
-#include "internal.h"
+#include "rffs.h"
 
 const struct address_space_operations rffs_aops = {
 	.readpage	= simple_readpage,

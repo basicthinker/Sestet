@@ -1,5 +1,6 @@
 # Object files
 *.o
+*.ko
 
 # Libraries
 *.lib
@@ -24,3 +25,9 @@
 *.opensdf
 *.suo
 Debug/*
+
+.tmp*
+*.cmd
+*.mod.c
+modules.*
+Module.*

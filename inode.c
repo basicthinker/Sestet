@@ -17,12 +17,13 @@
 #include <linux/init.h>
 #include <linux/string.h>
 #include <linux/backing-dev.h>
-#include <linux/rffs.h>
 #include <linux/sched.h>
 #include <linux/parser.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
+
+#include "rffs.h"
 
 #define RAMFS_DEFAULT_MODE	0755
 
