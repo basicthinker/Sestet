@@ -45,9 +45,9 @@
 #endif // Linux kernel
 
 #ifdef __KERNEL__
-  #define ERR_PRINT(str) // TODO
+  #define PRINT(...) printk(__VA_ARGS__)
 #else
-  #define ERR_PRINT(str) // TODO
+  #define PRINT(...) printf(__VA_ARGS__)
 #endif
 
 #endif

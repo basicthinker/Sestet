@@ -78,7 +78,7 @@ struct rffs_log {
   spinlock_t lock;
 };
 
-static inline struct rffs_log *log_new() {
+static inline struct rffs_log *log_new(void) {
   struct segment *seg = seg_new(0);
   struct rffs_log *log = (struct rffs_log *)MALLOC(sizeof(struct rffs_log));
 
@@ -114,7 +114,7 @@ static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
     end->seg->entries[0] = *entry;
     end->entry = 1;
   } else {
-    ERR_PRINT("[log_append] Out of index.");
+    PRINT("[log_append] Out of index.");
   }
   spin_unlock(&log->lock);
 }

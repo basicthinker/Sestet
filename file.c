@@ -11,9 +11,38 @@
  */
 
 #include <linux/fs.h>
-#include <linux/mm.h>
+#include <linux/aio.h>
+#include <linux/page-flags.h>
 
 #include "rffs.h"
+
+static int __set_page_dirty_no_writeback(struct page *page)
+{
+	if (!PageDirty(page))
+		return !TestSetPageDirty(page);
+	return 0;
+}
+
+static ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
+		unsigned long nr_segs, loff_t pos)
+{
+	struct file *filp = iocb->ki_filp;
+	struct inode *inode = filp->f_mapping->host;
+	ssize_t written = generic_file_aio_write(iocb, iov, nr_segs, pos);
+	printk(KERN_INFO "[sestet-aw]\t%lu\t%lld\t%d\n",
+		inode->i_ino, pos, written);
+	return written;
+}
+
+static ssize_t
+rffs_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
+		loff_t *ppos, size_t len, unsigned int flags)
+{
+	struct inode *inode = out->f_mapping->host;
+        printk(KERN_INFO "[sestet-sw]\t%lu\t%lld\t%d\n",
+                inode->i_ino, *ppos, len);
+	return generic_file_splice_write(pipe, out, ppos, len, flags);
+}
 
 const struct address_space_operations rffs_aops = {
 	.readpage	= simple_readpage,
@@ -26,11 +55,11 @@ const struct file_operations rffs_file_operations = {
 	.read		= do_sync_read,
 	.aio_read	= generic_file_aio_read,
 	.write		= do_sync_write,
-	.aio_write	= generic_file_aio_write,
+	.aio_write	= rffs_file_aio_write,
 	.mmap		= generic_file_mmap,
 	.fsync		= noop_fsync,
 	.splice_read	= generic_file_splice_read,
-	.splice_write	= generic_file_splice_write,
+	.splice_write	= rffs_file_splice_write,
 	.llseek		= generic_file_llseek,
 };
 
