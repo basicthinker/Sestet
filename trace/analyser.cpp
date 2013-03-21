@@ -18,6 +18,14 @@ class entry {
     }
 };
 
+static inline void print_near(const entry &cur, const entry &near, long long int overlap) {
+#ifdef DEBUG_OVER
+  printf("cur -   %lu\t%lld\t%lld\n", cur.ino, cur.begin, cur.end);
+  printf(" - near %lu\t%lld\t%lld\n", near.ino, near.begin, near.end);
+  printf(" - over %lld\n", overlap);
+#endif
+}
+
 int main(int argc, const char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "No file input specified.\n");
@@ -53,8 +61,8 @@ int main(int argc, const char *argv[]) {
         cur.begin > pre.end || cur.end < pre.begin) {
       ++rand_cnt;
 #ifdef DEBUG_RAND
-      fprintf(stderr, "pre -  %lu %lld %d\t\\\n", pre.ino, pre.begin, pre.end - pre.begin);
-      fprintf(stderr, " - cur %lu %lld %d\n", cur.ino, cur.begin, cur.end - cur.begin);
+      printf("pre -  %lu %lld %d\t\\\n", pre.ino, pre.begin, pre.end - pre.begin);
+      printf(" - cur %lu %lld %d\n", cur.ino, cur.begin, cur.end - cur.begin);
 #endif
     }
   }
@@ -77,20 +85,15 @@ int main(int argc, const char *argv[]) {
       else iprev = sorted.end();
 
       while (inext != sorted.end()) {
+        // inext->begin > icur->begin
         if (inext->end <= icur->end) {
           ++merged_cnt;
           overlap += inext->end - inext->begin;
-#ifdef DEBUG_OVER
-          fprintf(stderr, "cur -   %lu %lld %lld\n", icur->ino, icur->begin, icur->end);
-          fprintf(stderr, " - full %lu %lld %lld\n", inext->ino, inext->begin, inext->end);
-#endif
+          print_near(*icur, *inext, inext->end - inext->begin);
           sorted.erase(inext++);
         } else if (inext->begin < icur->end) {
           overlap += icur->end - inext->begin;
-#ifdef DEBUG_OVER
-          fprintf(stderr, "cur -   %lu %lld %lld\n", icur->ino, icur->begin, icur->end);
-          fprintf(stderr, " - part %lu %lld %lld\n", inext->ino, inext->begin, inext->end);
-#endif
+          print_near(*icur, *inext, icur->end - inext->begin);
           icur->end = inext->begin;
         } else break;
       }
@@ -98,29 +101,37 @@ int main(int argc, const char *argv[]) {
         if (iprev->end > icur->begin) {
           if (iprev->begin == icur->begin) {
             ++merged_cnt;
-            overlap += iprev->end - iprev->begin;
-#ifdef DEBUG_OVER
-            fprintf(stderr, "cur -   %lu %lld %lld\n", icur->ino, icur->begin, icur->end);
-            fprintf(stderr, " - full %lu %lld %lld\n", iprev->ino, iprev->begin, iprev->end);
-#endif
-            sorted.erase(iprev);
+            if (iprev->end <= icur->end) {
+              overlap += iprev->end - iprev->begin;
+              print_near(*icur, *iprev, iprev->end - iprev->begin);
+              sorted.erase(iprev);
+            } else { // iprev->end > icur->end
+              overlap += icur->end - icur->begin;
+              print_near(*icur, *iprev, icur->end - icur->begin);
+              continue;
+            }
           } else {
-            overlap += iprev->end - icur->begin;
-#ifdef DEBUG_OVER
-            fprintf(stderr, "cur -   %lu %lld %lld\n", icur->ino, icur->begin, icur->end);
-            fprintf(stderr, " - part %lu %lld %lld\n", iprev->ino, iprev->begin, iprev->end);
-#endif
-            icur->begin = iprev->end;
+            // iprev->begin < icur->begin
+            if (iprev->end < icur->end) {
+              overlap += iprev->end - icur->begin;
+              print_near(*icur, *iprev, iprev->end - icur->begin);
+              icur->begin = iprev->end;
+            } else { // iprev->end >= icur->end
+              ++merged_cnt;
+              overlap += icur->end - icur->begin;
+              print_near(*icur, *iprev, icur->end - icur->begin);
+              continue;
+            }
           }
         } // else no overlap
       }
-      sorted.insert(*icur);
+      if (icur->begin != icur->end) sorted.insert(*icur);
     }
   } // for trace iteration
   
-  fprintf(stdout, "Total number & space: %lu\t%lld\n", cnt, space);
-  fprintf(stdout, "Random writes: %lu\n", rand_cnt);
-  fprintf(stdout, "Merged number & space: %lu\t%lld\n", merged_cnt, overlap);
+  printf("Total number & space: %lu\t%lld\n", cnt, space);
+  printf("Random writes: %lu\n", rand_cnt);
+  printf("Merged number & space: %lu\t%lld\n", merged_cnt, overlap);
  
   fclose(stdin);
   return 0;
