@@ -31,3 +31,6 @@ Debug/*
 *.mod.c
 modules.*
 Module.*
+.project
+.cproject
+
