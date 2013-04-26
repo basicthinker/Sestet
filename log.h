@@ -9,129 +9,43 @@
 #ifndef SESTET_RFFS_LOG_H_
 #define SESTET_RFFS_LOG_H_
 
+#include <linux/types.h>
 #include "sys.h"
 
-#define SEG_LEN 4096 // 1k
-#define CHUNK_SIZE 4096 // 512 bytes
+#if !defined(LOG_LEN) || !defined(LOG_MASK)
+#define LOG_LEN 8192 // 8k
+#define LOG_MASK 0x1fff
+#endif
 
-struct seg_entry {
-  unsigned long int inode_id;
-  unsigned long int chunk_begin; // FFFFFFFF denotes inode entry
-  unsigned long int chunk_end;
-  char *data; // refers to inode info when this is inode entry
+struct entry {
+    unsigned long int inode_id;
+    unsigned long int chunk_begin; // FFFFFFFF denotes inode entry
+    void *data; // refers to inode info when this is inode entry
 };
 
-struct segment {
-  struct seg_entry entries[SEG_LEN];
-  struct segment *prev;
-  struct segment *next;
-  unsigned int seq_num;
+struct log {
+    struct entry l_entries[LOG_LEN];
+    atomic_t l_begin; // begin of prepared entries
+    atomic_t l_head; // begin of active entries
+    atomic_t l_end;
+    atomic_t l_order;  // 0 means log_begin <= log_head < log_end
 };
 
-static inline struct segment *seg_new(unsigned int seq_num) {
-  struct segment *seg = (struct segment *)MALLOC(sizeof(struct segment));
-  seg->prev = seg->next = 0;
-  seg->seq_num = seq_num;
-  return seg;
+static inline void log_init(struct log *log) {
+    atomic_set(&log->l_begin, -1);
+    atomic_set(&log->l_head, -1);
+    atomic_set(&log->l_end, 0);
+    atomic_set(&log->l_order, 0);
 }
 
-static inline void seg_free(struct segment *seg) {
-  MFREE(seg);
+static inline void log_append(struct log *log, struct entry *entry) {
+
 }
 
-static inline struct segment *seg_insert(struct segment *prev_seg) {
-  struct segment *new_seg = seg_new(prev_seg->seq_num + 1);
-  struct segment *next_seg = prev_seg->next;
+static inline void log_seal(struct log *log) {
 
-  prev_seg->next = new_seg;
-  new_seg->prev = prev_seg;
-  next_seg->prev = new_seg;
-  new_seg->next = next_seg;
-
-  return new_seg;
 }
 
-struct entry_array {
-  struct seg_entry **entries;
-  unsigned int len;
-};
-
-static void entry_array_init(struct entry_array *arr, unsigned int len) {
-  arr->len = len;
-  arr->entries = (struct seg_entry **)MALLOC(len * sizeof(struct seg_entry));
-}
-
-static void entry_array_clear(struct entry_array *arr) {
-  MFREE(arr->entries);
-  arr->len = 0;
-}
-
-struct log_pos { // only for internal use
-  struct segment *seg;
-  unsigned int entry;
-};
-
-struct rffs_log {
-  struct log_pos log_begin; // begin of sealed entries
-  struct log_pos log_head; // begin of active entries
-  struct log_pos log_end;
-  spinlock_t lock;
-};
-
-static inline struct rffs_log *log_new(void) {
-  struct segment *seg = seg_new(0);
-  struct rffs_log *log = (struct rffs_log *)MALLOC(sizeof(struct rffs_log));
-
-  seg->prev = seg->next = seg;
-
-  log->log_begin.seg = log->log_head.seg = log->log_end.seg = seg;
-  log->log_begin.entry = log->log_head.entry = log->log_end.entry = 0;
-  spin_lock_init(&log->lock);
-  return log;
-}
-
-static inline void log_free(struct rffs_log *log) {
-  struct segment *seg = log->log_begin.seg;
-  while (seg->next != log->log_begin.seg) {
-    seg = seg->next;
-    seg_free(seg->prev);
-  }
-  seg_free(seg);
-
-  spin_lock_destroy(&log->lock);
-  MFREE(log);
-}
-
-static inline void log_append(struct rffs_log *log, struct seg_entry *entry) {
-  struct log_pos *end;
-  spin_lock(&log->lock);
-  end = &log->log_end;
-  if (end->entry < SEG_LEN) {
-    end->seg->entries[end->entry] = *entry;
-    ++end->entry;
-  } else if (end->entry == SEG_LEN) {
-    end->seg = seg_insert(end->seg);
-    end->seg->entries[0] = *entry;
-    end->entry = 1;
-  } else {
-    PRINT("[log_append] Out of index.");
-  }
-  spin_unlock(&log->lock);
-}
-
-static inline void log_seal(struct rffs_log *log,
-                            struct log_pos *trans_begin, // output
-                            struct log_pos *trans_end) { // output
-  spin_lock(&log->lock);
-  *trans_begin = log->log_head;
-  *trans_end = log->log_end;
-  log->log_head = log->log_end;
-  spin_unlock(&log->lock);
-}
-
-// Returns sorted array of pointers to seg_entry,
-// which should be deallocated in log_flush().
-extern struct entry_array log_sort(const struct log_pos *begin,
-    const struct log_pos *en);
+extern int log_sort(struct log *log, unsigned int begin, unsigned int end);
 
 #endif
