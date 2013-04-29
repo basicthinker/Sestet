@@ -8,9 +8,83 @@
 
 #include "log.h"
 
-#define CUTOFF 4
+#define CUT_OFF 4
 #define STACK_SIZE 32
 
+#define SWAP_ENTRY(a, b) do {   \
+  struct entry tmp;             \
+  tmp = a;                      \
+  a = b;                        \
+  b = tmp;                      \
+} while(0)
+
+#define comp_entry(a, b) (a.inode_id < b.inode_id ?   \
+    -1 : (a.inode_id == b.inode_id ?                  \
+            a.chunk_begin - b.chunk_begin : 1))
+
+struct stack_elem {
+    unsigned int left;
+    unsigned int right;
+};
+
+static struct stack_elem stack[STACK_SIZE];
+static unsigned int stack_top = 0;
+
+#define elem_len(elem) (elem.right - elem.left + 1)
+#define stack_empty() (stack_top == 0)
+#define stack_avail() (stack_top < STACK_SIZE)
+#define stack_push(l, r) do {   \
+    stack[stack_top].left = l;  \
+    stack[stack_top].right = r; \
+    ++stack_top;                \
+} while(0)
+#define stack_pop(elem) do { elem = stack[--stack_top]; } while(0)
+
+static void short_sort(struct entry entries[],
+        unsigned int l, unsigned int r) {
+  unsigned int i, max, pos;
+  if (l == r) return;
+
+  for (pos = r; pos > l; --pos) {
+    max = pos;
+    for (i = l; i < pos; ++i) {
+      if (comp_entry(entries[i], entries[max]) > 0) max = i;
+    }
+    SWAP_ENTRY(entries[max], entries[pos]);
+  }
+}
+
+static inline unsigned int partition(struct entry entries[],
+        unsigned int l, unsigned int r) {
+    unsigned int mi = (l + r) >> 2;
+    struct entry m = entries[mi];
+    entries[mi] = entries[l];
+    entries[l] = m;
+    while (l < r) {
+        while (l < r && comp_entry(entries[r], m) > 0) --r;
+        entries[l++] = entries[r];
+        while (l < r && comp_entry(entries[l], m) < 0) ++l;
+        entries[r--] = entries[l];
+    }
+    entries[l] = m;
+    return l;
+}
+
 int log_sort(struct log *log, unsigned int begin, unsigned int end) {
+    struct stack_elem elem;
+    unsigned int p;
+    stack_push(begin, end - 1);
+    while (!stack_empty()) {
+        stack_pop(elem);
+        if (elem_len(elem) > CUT_OFF) {
+            p = partition(log->l_entries, elem.left, elem.right);
+            if (!stack_avail()) return -1;
+            stack_push(elem.left, p - 1);
+            if (!stack_avail()) return -1;
+            stack_push(p + 1, elem.right);
+        } else {
+            short_sort(log->l_entries, elem.left, elem.right);
+        }
+    }
     return 0;
 }
