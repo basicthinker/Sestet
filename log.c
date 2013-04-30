@@ -11,8 +11,10 @@
 #define CUT_OFF 4
 #define STACK_SIZE 32
 
+#define entries(i) (entries[i & LOG_MASK])
+
 #define SWAP_ENTRY(a, b) do {   \
-  struct entry tmp;             \
+  struct log_entry tmp;         \
   tmp = a;                      \
   a = b;                        \
   b = tmp;                      \
@@ -20,7 +22,7 @@
 
 #define comp_entry(a, b) (a.inode_id < b.inode_id ?   \
     -1 : (a.inode_id == b.inode_id ?                  \
-            a.chunk_begin - b.chunk_begin : 1))
+            a.block_begin - b.block_begin : 1))
 
 struct stack_elem {
     unsigned int left;
@@ -40,7 +42,7 @@ static unsigned int stack_top = 0;
 } while(0)
 #define stack_pop(elem) do { elem = stack[--stack_top]; } while(0)
 
-static void short_sort(struct entry entries[],
+static void short_sort(struct log_entry entries[],
         unsigned int l, unsigned int r) {
   unsigned int i, max, pos;
   if (l == r) return;
@@ -48,43 +50,81 @@ static void short_sort(struct entry entries[],
   for (pos = r; pos > l; --pos) {
     max = pos;
     for (i = l; i < pos; ++i) {
-      if (comp_entry(entries[i], entries[max]) > 0) max = i;
+      if (comp_entry(entries(i), entries(max)) > 0) max = i;
     }
-    SWAP_ENTRY(entries[max], entries[pos]);
+    SWAP_ENTRY(entries(max), entries(pos));
   }
 }
 
-static inline unsigned int partition(struct entry entries[],
+static inline unsigned int partition(struct log_entry entries[],
         unsigned int l, unsigned int r) {
     unsigned int mi = (l + r) >> 2;
-    struct entry m = entries[mi];
-    entries[mi] = entries[l];
-    entries[l] = m;
+    struct log_entry m = entries(mi);
+    entries(mi) = entries(l);
+    entries(l) = m;
     while (l < r) {
-        while (l < r && comp_entry(entries[r], m) > 0) --r;
-        entries[l++] = entries[r];
-        while (l < r && comp_entry(entries[l], m) < 0) ++l;
-        entries[r--] = entries[l];
+        while (l < r && comp_entry(entries(r), m) > 0) --r;
+        entries(l++) = entries(r);
+        while (l < r && comp_entry(entries(l), m) < 0) ++l;
+        entries(r--) = entries(l);
     }
-    entries[l] = m;
+    entries(l) = m;
     return l;
 }
 
-int log_sort(struct log *log, unsigned int begin, unsigned int end) {
+int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end) {
     struct stack_elem elem;
     unsigned int p;
+    if (begin >= end) return -EINVAL;
     stack_push(begin, end - 1);
     while (!stack_empty()) {
         stack_pop(elem);
         if (elem_len(elem) > CUT_OFF) {
             p = partition(log->l_entries, elem.left, elem.right);
-            if (!stack_avail()) return -1;
+            if (!stack_avail()) return -EOVERFLOW;
             stack_push(elem.left, p - 1);
-            if (!stack_avail()) return -1;
+            if (!stack_avail()) return -EOVERFLOW;
             stack_push(p + 1, elem.right);
         } else {
             short_sort(log->l_entries, elem.left, elem.right);
         }
     }
+    return 0;
+}
+
+
+int log_flush(struct rffs_log *log, unsigned int nr) {
+    unsigned int begin, end;
+    unsigned int i;
+    int err;
+    struct log_entry *entries = log->l_entries;
+    struct transaction *trans;
+
+    spin_lock(&log->l_lock);
+    begin = end = log->l_begin;
+    while (nr && !list_empty(&log->l_trans)) {
+        trans = list_entry(log->l_trans.next, struct transaction, list);
+        if (trans->begin != end) {
+            PRINT("[Err] Transactions do not join: %ud <-> %ud",
+                    end, trans->begin);
+            return -EFAULT;
+        }
+        end = trans->end;
+        list_del(&trans->list);
+        MFREE(trans);
+        --nr;
+    }
+    ADJUST(begin, end);
+    PRINT("-1\t-1\n");
+    err = log_sort(log, begin, end);
+    if (err) {
+        PRINT("[Err-%d] log_sort() failed.", err);
+        return -EAGAIN;
+    }
+    for (i = begin; i < end; ++i) {
+        PRINT("%lu\t%lu\n", entries(i).inode_id, entries(i).block_begin);
+    }
+    log->l_begin = end;
+    spin_unlock(&log->l_lock);
     return 0;
 }

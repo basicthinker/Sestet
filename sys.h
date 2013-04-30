@@ -12,7 +12,7 @@
 #ifdef __KERNEL__ // Linux kernel space
     #include <linux/slab.h>
     #define MALLOC(size) kmalloc(size, GFP_KERNEL)
-    #define MFREE(size) kfree(size)
+    #define MFREE(p) kfree(p)
 #else
     #include <stdlib.h>
     #define MALLOC(size) malloc(size)

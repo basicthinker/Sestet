@@ -11,6 +11,7 @@
 
 #include <linux/types.h>
 #include <linux/list.h>
+#include <asm/errno.h>
 #include "sys.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
@@ -18,9 +19,15 @@
 #define LOG_MASK 0x1fff
 #endif
 
-struct entry {
+#define ADJUST(a, b) do {       \
+    a &= LOG_MASK;              \
+    b &= LOG_MASK;              \
+    if (a > b) b += LOG_LEN;    \
+} while(0)
+
+struct log_entry {
     unsigned long int inode_id;
-    unsigned long int chunk_begin; // FFFFFFFF denotes inode entry
+    unsigned long int block_begin; // FFFFFFFF denotes inode entry
     void *data; // refers to inode info when this is inode entry
 };
 
@@ -36,51 +43,61 @@ enum l_order {
     L_END
 };
 
-struct log {
-    struct entry l_entries[LOG_LEN];
+struct rffs_log {
+    struct log_entry l_entries[LOG_LEN];
     unsigned int l_begin; // begin of prepared entries
     unsigned int l_head; // begin of active entries
     atomic_t l_end;
     struct list_head l_trans;
     enum l_order l_order;  // 'b' means log_begin <= log_head < log_end
+    spinlock_t l_lock; // to protect the prepared entries
 };
 
 #define L_END(log) (atomic_read(&log->l_end))
 
-static inline void log_init(struct log *log) {
+static inline void log_init(struct rffs_log *log) {
     log->l_begin = 0;
     log->l_head = 0;
     atomic_set(&log->l_end, 0);
     log->l_order = L_BEGIN;
     INIT_LIST_HEAD(&log->l_trans);
+    spin_lock_init(&log->l_lock);
 }
 
-static inline void log_append(struct log *log, struct entry *entry) {
+extern int log_flush(struct rffs_log *log, unsigned int nr);
+
+static inline void log_append(struct rffs_log *log, struct log_entry *entry) {
     unsigned int tail = atomic_inc_return(&log->l_end) - 1;
+    int err;
     // We assume that the order is not changed immediately
     if (tail == -1) log->l_order = L_END;
     while (log->l_order != L_BEGIN && tail >= log->l_begin) {
-        // TODO
-        PRINT("Out of log: sn = %ud", tail);
-        return;
+        err = log_flush(log, 1);
+        if (err) {
+            PRINT("[Err-%d] log failed to append: inode = %lu, block = %lu\n",
+                    err, entry->inode_id, entry->block_begin);
+            return;
+        }
     }
     log->l_entries[tail & LOG_MASK] = *entry;
 }
 
-static inline void log_seal(struct log *log) {
+static inline void log_seal(struct rffs_log *log) {
     struct transaction *trans;
     if (log->l_order != L_END && log->l_head == L_END(log)) return;
 
     trans = (struct transaction *)MALLOC(sizeof(struct transaction));
+
+    spin_lock(&log->l_lock);
     trans->begin = log->l_head;
     trans->end = L_END(log);
     list_add_tail(&trans->list, &log->l_trans);
-
     log->l_head = trans->end;
     if (log->l_order == L_END && log->l_head < log->l_begin)
         log->l_order = L_HEAD;
+    spin_unlock(&log->l_lock);
 }
 
-extern int log_sort(struct log *log, unsigned int begin, unsigned int end);
+extern int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end);
 
 #endif
