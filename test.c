@@ -15,8 +15,14 @@
 
 int main(int argc, const char *argv[]) {
     struct rffs_log log;
-
+    struct log_entry entry;
+    int i;
     log_init(&log);
-
+    for (i = 0; i < LOG_LEN; ++i) {
+    	entry.block_begin = rand() & 1023;
+    	entry.inode_id = rand() & 1023;
+    	log_append(&log, &entry);
+    }
+    log_flush(&log, LOG_LEN);
     return 0;
 }

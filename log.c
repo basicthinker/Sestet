@@ -105,7 +105,7 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
     while (nr && !list_empty(&log->l_trans)) {
         trans = list_entry(log->l_trans.next, struct transaction, list);
         if (trans->begin != end) {
-            PRINT("[Err] Transactions do not join: %ud <-> %ud",
+            PRINT("[Err] Transactions do not join: %u <-> %u\n",
                     end, trans->begin);
             return -EFAULT;
         }
@@ -114,11 +114,15 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
         MFREE(trans);
         --nr;
     }
+    if (begin == end) {
+    	PRINT("[Warn] No transaction flushed: begin = end = %u\n", begin);
+    	return -ENODATA;
+    }
     ADJUST(begin, end);
-    PRINT("-1\t-1\n");
+    PRINT("-1\t0\n");
     err = log_sort(log, begin, end);
     if (err) {
-        PRINT("[Err-%d] log_sort() failed.", err);
+        PRINT("[Err-%d] log_sort() failed.\n", err);
         return -EAGAIN;
     }
     for (i = begin; i < end; ++i) {

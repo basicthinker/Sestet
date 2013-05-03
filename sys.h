@@ -34,7 +34,18 @@
 #ifdef __KERNEL__
     #define PRINT(...) printk(__VA_ARGS__)
 #else
+    #include <stdio.h>
     #define PRINT(...) printf(__VA_ARGS__)
 #endif
 
+#ifdef __KERNEL__
+	#include <linux/list.h>
+#else
+	#include "list.h"
 #endif
+
+#ifndef __KERNEL__
+	#include "atomic.h"
+#endif
+
+#endif // SESTET_RFFS_SYS_H_

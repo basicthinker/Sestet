@@ -10,13 +10,12 @@
 #define SESTET_RFFS_LOG_H_
 
 #include <linux/types.h>
-#include <linux/list.h>
 #include <asm/errno.h>
 #include "sys.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
 #define LOG_LEN 8192 // 8k
-#define LOG_MASK 0x1fff
+#define LOG_MASK 8191
 #endif
 
 #define ADJUST(a, b) do {       \
@@ -66,22 +65,6 @@ static inline void log_init(struct rffs_log *log) {
 
 extern int log_flush(struct rffs_log *log, unsigned int nr);
 
-static inline void log_append(struct rffs_log *log, struct log_entry *entry) {
-    unsigned int tail = atomic_inc_return(&log->l_end) - 1;
-    int err;
-    // We assume that the order is not changed immediately
-    if (tail == -1) log->l_order = L_END;
-    while (log->l_order != L_BEGIN && tail >= log->l_begin) {
-        err = log_flush(log, 1);
-        if (err) {
-            PRINT("[Err-%d] log failed to append: inode = %lu, block = %lu\n",
-                    err, entry->inode_id, entry->block_begin);
-            return;
-        }
-    }
-    log->l_entries[tail & LOG_MASK] = *entry;
-}
-
 static inline void log_seal(struct rffs_log *log) {
     struct transaction *trans;
     if (log->l_order != L_END && log->l_head == L_END(log)) return;
@@ -93,9 +76,29 @@ static inline void log_seal(struct rffs_log *log) {
     trans->end = L_END(log);
     list_add_tail(&trans->list, &log->l_trans);
     log->l_head = trans->end;
-    if (log->l_order == L_END && log->l_head < log->l_begin)
+    if (log->l_order == L_END && log->l_head <= log->l_begin)
         log->l_order = L_HEAD;
     spin_unlock(&log->l_lock);
+}
+
+static inline void log_append(struct rffs_log *log, struct log_entry *entry) {
+    unsigned int tail = atomic_inc_return(&log->l_end) - 1;
+    int err;
+    // We assume that the order is not changed immediately
+    if (tail == -1) log->l_order = L_END;
+    while (log->l_order != L_BEGIN && tail >= log->l_begin) {
+        err = log_flush(log, 1);
+        if (err == -ENODATA) {
+        	log_seal(log);
+        	err = log_flush(log, 1);
+        }
+        if (err) {
+            PRINT("[Err-%d] log failed to append: inode = %lu, block = %lu\n",
+                    err, entry->inode_id, entry->block_begin);
+            return;
+        }
+    }
+    log->l_entries[tail & LOG_MASK] = *entry;
 }
 
 extern int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end);
