@@ -128,7 +128,10 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
     for (i = begin; i < end; ++i) {
         PRINT("%lu\t%lu\n", entries(i).inode_id, entries(i).block_begin);
     }
+
     log->l_begin = end;
+    if (log->l_order == L_HEAD && L_INDEX(log->l_begin) <= L_INDEX(log->l_head))
+        log->l_order = L_BEGIN;
     spin_unlock(&log->l_lock);
     return 0;
 }

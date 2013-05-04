@@ -1,0 +1,11 @@
+CC = gcc
+CFLAGS += -g -Wall
+LIB = -lpthread
+SOURCES = log.c test.c
+HEADERS = log.h sys.h list.h atomic.h
+
+all : $(SOURCES) $(HEADERS)
+	$(CC) $(CFLAGS) $(LIB) -o test.o $^
+
+clean :
+	rm -rf *.o
