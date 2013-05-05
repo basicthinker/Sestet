@@ -23,7 +23,7 @@
 #define ADJUST(a, b) do {       \
     a &= LOG_MASK;              \
     b &= LOG_MASK;              \
-    if (a > b) b += LOG_LEN;    \
+    if (a >= b) b += LOG_LEN;    \
 } while(0)
 
 struct log_entry {
@@ -65,44 +65,68 @@ static inline void log_init(struct rffs_log *log) {
     spin_lock_init(&log->l_lock);
 }
 
-extern int log_flush(struct rffs_log *log, unsigned int nr);
+extern int __log_flush(struct rffs_log *log, unsigned int nr);
 
-static inline void log_seal(struct rffs_log *log) {
+static inline int log_flush(struct rffs_log *log, unsigned int nr) {
+    int ret;
+    spin_lock(&log->l_lock);
+    ret = __log_flush(log, nr);
+    spin_unlock(&log->l_lock);
+    return ret;
+}
+
+static inline void __log_seal(struct rffs_log *log) {
     struct transaction *trans;
-    if (log->l_order != L_END && L_INDEX(log->l_head) == L_INDEX(L_END(log)))
+    unsigned int end = L_END(log);
+    if (log->l_head == end) {
+        PRINT("[Warn] log failed to seal: %u-%u-%u\n",
+                L_INDEX(log->l_begin), L_INDEX(log->l_head), L_INDEX(end));
         return;
-
+    }
+    if (end - log->l_begin > LOG_LEN) {
+        end = log->l_begin + LOG_LEN;
+    }
     trans = (struct transaction *)MALLOC(sizeof(struct transaction));
 
-    spin_lock(&log->l_lock);
     trans->begin = log->l_head;
-    trans->end = L_END(log);
+    trans->end = end;
     list_add_tail(&trans->list, &log->l_trans);
 
     log->l_head = trans->end;
-    if (log->l_order == L_END && L_INDEX(log->l_head) <= L_INDEX(L_END(log)))
+    if (log->l_order == L_END && L_INDEX(log->l_head) <= L_INDEX(log->l_begin))
         log->l_order = L_HEAD;
+}
+
+static inline void log_seal(struct rffs_log *log) {
+    spin_lock(&log->l_lock);
+    __log_seal(log);
     spin_unlock(&log->l_lock);
 }
 
-static inline void log_append(struct rffs_log *log, struct log_entry *entry) {
+static inline int log_append(struct rffs_log *log, struct log_entry *entry) {
     unsigned int tail = atomic_inc_return(&log->l_end) - 1;
     int err;
     // We assume that the order is not changed immediately
     if (L_INDEX(tail) == LOG_MASK) log->l_order = L_END;
-    while (log->l_order != L_BEGIN && L_INDEX(tail) >= L_INDEX(log->l_begin)) {
-        err = log_flush(log, 1);
-        if (err == -ENODATA) {
-        	log_seal(log);
-        	err = log_flush(log, 1);
+    if (tail - log->l_begin >= LOG_LEN) {
+        spin_lock(&log->l_lock);
+        while (tail - log->l_begin >= LOG_LEN) {
+            err = __log_flush(log, 1);
+            if (err == -ENODATA) {
+                __log_seal(log);
+                err = __log_flush(log, 1);
+            }
+            if (err) {
+                PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",
+                        err, entry->inode_id, entry->block_begin);
+                spin_unlock(&log->l_lock);
+                return err;
+            }
         }
-        if (err) {
-            PRINT("[Err-%d] log failed to append: inode = %lu, block = %lu\n",
-                    err, entry->inode_id, entry->block_begin);
-            return;
-        }
+        spin_unlock(&log->l_lock);
     }
     log->l_entries[L_INDEX(tail)] = *entry;
+    return 0;
 }
 
 extern int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end);

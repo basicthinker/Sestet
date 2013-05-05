@@ -45,7 +45,7 @@ static unsigned int stack_top = 0;
 static void short_sort(struct log_entry entries[],
         unsigned int l, unsigned int r) {
   unsigned int i, max, pos;
-  if (l == r) return;
+  if (l >= r) return;
 
   for (pos = r; pos > l; --pos) {
     max = pos;
@@ -56,9 +56,8 @@ static void short_sort(struct log_entry entries[],
   }
 }
 
-static inline unsigned int partition(struct log_entry entries[],
-        unsigned int l, unsigned int r) {
-    unsigned int mi = (l + r) >> 2;
+static inline unsigned int partition(struct log_entry entries[], int l, int r) {
+    int mi = (l + r) >> 1;
     struct log_entry m = entries(mi);
     entries(mi) = entries(l);
     entries(l) = m;
@@ -93,14 +92,13 @@ int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end) {
 }
 
 
-int log_flush(struct rffs_log *log, unsigned int nr) {
+int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int begin, end;
     unsigned int i;
     int err;
     struct log_entry *entries = log->l_entries;
     struct transaction *trans;
 
-    spin_lock(&log->l_lock);
     begin = end = log->l_begin;
     while (nr && !list_empty(&log->l_trans)) {
         trans = list_entry(log->l_trans.next, struct transaction, list);
@@ -122,7 +120,11 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
     PRINT("-1\t0\n");
     err = log_sort(log, begin, end);
     if (err) {
-        PRINT("[Err-%d] log_sort() failed.\n", err);
+        PRINT("[Err%d] log_sort() failed.\n", err);
+        trans = (struct transaction *)MALLOC(sizeof(struct transaction));
+        trans->begin = begin;
+        trans->end = end;
+        list_add(&trans->list, &log->l_trans);
         return -EAGAIN;
     }
     for (i = begin; i < end; ++i) {
@@ -132,6 +134,6 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
     log->l_begin = end;
     if (log->l_order == L_HEAD && L_INDEX(log->l_begin) <= L_INDEX(log->l_head))
         log->l_order = L_BEGIN;
-    spin_unlock(&log->l_lock);
+
     return 0;
 }

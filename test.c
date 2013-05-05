@@ -16,12 +16,12 @@
 int main(int argc, const char *argv[]) {
     struct rffs_log log;
     struct log_entry entry;
-    int i;
+    int i, err;
     log_init(&log);
-    for (i = 0; i < (LOG_LEN * 2); ++i) {
+    for (i = 0, err = 0; i < (LOG_LEN * 2) && !err; ++i) {
     	entry.inode_id = rand() & 1023;
     	entry.block_begin = i;
-    	log_append(&log, &entry);
+    	err = log_append(&log, &entry);
     }
     log_flush(&log, LOG_LEN);
     return 0;
