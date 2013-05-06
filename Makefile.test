@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS += -g -Wall
+CFLAGS += -g -Wall -pthread
 LIB = -lpthread
 SOURCES = log.c test.c
 HEADERS = log.h sys.h list.h atomic.h

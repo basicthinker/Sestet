@@ -20,10 +20,6 @@
   b = tmp;                      \
 } while(0)
 
-#define comp_entry(a, b) (a.inode_id < b.inode_id ?   \
-    -1 : (a.inode_id == b.inode_id ?                  \
-            a.block_begin - b.block_begin : 1))
-
 struct stack_elem {
     unsigned int left;
     unsigned int right;
@@ -34,7 +30,7 @@ static unsigned int stack_top = 0;
 
 #define elem_len(elem) (elem.right - elem.left + 1)
 #define stack_empty() (stack_top == 0)
-#define stack_avail() (stack_top < STACK_SIZE)
+#define stack_avail(nr) (STACK_SIZE - stack_top >= nr)
 #define stack_push(l, r) do {   \
     stack[stack_top].left = l;  \
     stack[stack_top].right = r; \
@@ -42,15 +38,14 @@ static unsigned int stack_top = 0;
 } while(0)
 #define stack_pop(elem) do { elem = stack[--stack_top]; } while(0)
 
-static void short_sort(struct log_entry entries[],
-        unsigned int l, unsigned int r) {
-  unsigned int i, max, pos;
+static void short_sort(struct log_entry entries[], int l, int r) {
+  int i, max, pos;
   if (l >= r) return;
 
   for (pos = r; pos > l; --pos) {
     max = pos;
     for (i = l; i < pos; ++i) {
-      if (comp_entry(entries(i), entries(max)) > 0) max = i;
+      if (comp_entry(&entries(i), &entries(max)) > 0) max = i;
     }
     SWAP_ENTRY(entries(max), entries(pos));
   }
@@ -62,27 +57,26 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     entries(mi) = entries(l);
     entries(l) = m;
     while (l < r) {
-        while (l < r && comp_entry(entries(r), m) > 0) --r;
-        entries(l++) = entries(r);
-        while (l < r && comp_entry(entries(l), m) < 0) ++l;
-        entries(r--) = entries(l);
+        while (l < r && comp_entry(&entries(r), &m) >= 0) --r;
+        entries(l) = entries(r);
+        while (l < r && comp_entry(&entries(l), &m) <= 0) ++l;
+        entries(r) = entries(l);
     }
     entries(l) = m;
     return l;
 }
 
-int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end) {
+int log_sort(struct rffs_log *log, int begin, int end) {
     struct stack_elem elem;
-    unsigned int p;
+    int p;
     if (begin >= end) return -EINVAL;
     stack_push(begin, end - 1);
     while (!stack_empty()) {
         stack_pop(elem);
         if (elem_len(elem) > CUT_OFF) {
             p = partition(log->l_entries, elem.left, elem.right);
-            if (!stack_avail()) return -EOVERFLOW;
+            if (!stack_avail(2)) return -EOVERFLOW;
             stack_push(elem.left, p - 1);
-            if (!stack_avail()) return -EOVERFLOW;
             stack_push(p + 1, elem.right);
         } else {
             short_sort(log->l_entries, elem.left, elem.right);
@@ -113,11 +107,11 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         --nr;
     }
     if (begin == end) {
-    	PRINT("[Warn] No transaction flushed: begin = end = %u\n", begin);
+    	PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);
     	return -ENODATA;
     }
     ADJUST(begin, end);
-    PRINT("-1\t0\n");
+    PRINT("(-1)\t%d\n", end - begin);
     err = log_sort(log, begin, end);
     if (err) {
         PRINT("[Err%d] log_sort() failed.\n", err);
@@ -128,7 +122,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         return -EAGAIN;
     }
     for (i = begin; i < end; ++i) {
-        PRINT("%lu\t%lu\n", entries(i).inode_id, entries(i).block_begin);
+        PRINT("(%d)\t%lu\t%lu\n", i, entries(i).inode_id, entries(i).block_begin);
     }
 
     log->l_begin = end;

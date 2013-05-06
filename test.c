@@ -11,18 +11,35 @@
 
 #include "log.h"
 
-//#define ALLOC_DATA
-
 int main(int argc, const char *argv[]) {
     struct rffs_log log;
     struct log_entry entry;
-    int i, err;
+    int i, j, err, nr_trans, trans_len;
     log_init(&log);
+    // Two-round appending
     for (i = 0, err = 0; i < (LOG_LEN * 2) && !err; ++i) {
     	entry.inode_id = rand() & 1023;
     	entry.block_begin = i;
     	err = log_append(&log, &entry);
     }
+    log_seal(&log);
+    log_flush(&log, LOG_LEN);
+
+    // Random appending, sealing and flushing
+    nr_trans = 10;
+    trans_len = LOG_LEN >> 1;
+    for (i = 0; i < nr_trans; ++i) {
+    	int len = rand() % trans_len;
+    	PRINT("(-1)\t%d\n", len);
+    	for (j = 0, err = 0; j < len && !err; ++j) {
+    		entry.inode_id = rand() & 1023;
+    		entry.block_begin = j;
+    		err = log_append(&log, &entry);
+    	}
+    	log_seal(&log);
+    	if ((i & 1) == 1) log_flush(&log, 2);
+    }
+    log_seal(&log);
     log_flush(&log, LOG_LEN);
     return 0;
 }

@@ -14,8 +14,8 @@
 #include "sys.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
-#define LOG_LEN 8192 // 8k
-#define LOG_MASK 8191
+#define LOG_LEN 128 // 8192 // 8k
+#define LOG_MASK 127 // 8191
 #endif
 
 #define L_INDEX(p) (p & LOG_MASK)
@@ -31,6 +31,12 @@ struct log_entry {
     unsigned long int block_begin; // FFFFFFFF denotes inode entry
     void *data; // refers to inode info when this is inode entry
 };
+
+static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
+	if (a->inode_id < b->inode_id) return -1;
+	else if (a->inode_id == b->inode_id) return a->block_begin - b->block_begin;
+	else return 1;
+}
 
 struct transaction {
     unsigned int begin;
@@ -129,6 +135,6 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry) {
     return 0;
 }
 
-extern int log_sort(struct rffs_log *log, unsigned int begin, unsigned int end);
+extern int log_sort(struct rffs_log *log, int begin, int end);
 
 #endif
