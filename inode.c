@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <asm/uaccess.h>
 
+#include "hashtable.h"
 #include "rffs.h"
 
 #define RAMFS_DEFAULT_MODE	0755
@@ -37,6 +38,8 @@ static struct backing_dev_info rffs_backing_dev_info = {
                 | BDI_CAP_MAP_COPY | BDI_CAP_READ_MAP | BDI_CAP_WRITE_MAP
                 | BDI_CAP_EXEC_MAP,
 };
+
+DEFINE_HASHTABLE(inode_map, 8);
 
 struct inode *rffs_get_inode(struct super_block *sb, const struct inode *dir,
         int mode, dev_t dev) {
@@ -122,14 +125,23 @@ static int rffs_symlink(struct inode * dir, struct dentry *dentry,
     return error;
 }
 
-static const struct inode_operations rffs_dir_inode_operations = { .create =
-        rffs_create, .lookup = simple_lookup, .link = simple_link, .unlink =
-        simple_unlink, .symlink = rffs_symlink, .mkdir = rffs_mkdir, .rmdir =
-        simple_rmdir, .mknod = rffs_mknod, .rename = simple_rename, };
+static const struct inode_operations rffs_dir_inode_operations = {
+    .create = rffs_create,
+    .lookup = simple_lookup,
+    .link = simple_link,
+    .unlink = simple_unlink,
+    .symlink = rffs_symlink,
+    .mkdir = rffs_mkdir,
+    .rmdir = simple_rmdir,
+    .mknod = rffs_mknod,
+    .rename = simple_rename,
+};
 
-static const struct super_operations rffs_ops =
-        { .statfs = simple_statfs, .drop_inode = generic_delete_inode,
-                .show_options = generic_show_options, };
+static const struct super_operations rffs_ops = {
+    .statfs = simple_statfs,
+    .drop_inode = generic_delete_inode,
+    .show_options = generic_show_options,
+};
 
 struct rffs_mount_opts {
     umode_t mode;
@@ -228,20 +240,16 @@ struct dentry *rffs_mount(struct file_system_type *fs_type, int flags,
     return mount_nodev(fs_type, flags, data, rffs_fill_super);
 }
 
-static struct dentry *rootfs_mount(struct file_system_type *fs_type, int flags,
-        const char *dev_name, void *data) {
-    return mount_nodev(fs_type, flags | MS_NOUSER, data, rffs_fill_super);
-}
-
 static void rffs_kill_sb(struct super_block *sb) {
     kfree(sb->s_fs_info);
     kill_litter_super(sb);
 }
 
-static struct file_system_type rffs_fs_type = { .name = "rffs", .mount =
-        rffs_mount, .kill_sb = rffs_kill_sb, };
-static struct file_system_type rootfs_fs_type = { .name = "rootfs", .mount =
-        rootfs_mount, .kill_sb = kill_litter_super, };
+static struct file_system_type rffs_fs_type = {
+        .name = "rffs",
+        .mount = rffs_mount,
+        .kill_sb = rffs_kill_sb,
+};
 
 static int __init init_rffs_fs(void) {
     return register_filesystem(&rffs_fs_type);
@@ -251,21 +259,7 @@ static void __exit exit_rffs_fs(void) {
     unregister_filesystem(&rffs_fs_type);
 }
 
-module_init( init_rffs_fs)
-module_exit( exit_rffs_fs)
-
-int __init init_rootfs(void) {
-    int err;
-
-    err = bdi_init(&rffs_backing_dev_info);
-    if (err)
-    return err;
-
-    err = register_filesystem(&rootfs_fs_type);
-    if (err)
-    bdi_destroy(&rffs_backing_dev_info);
-
-    return err;
-}
+module_init(init_rffs_fs)
+module_exit(exit_rffs_fs)
 
 MODULE_LICENSE("GPL");
