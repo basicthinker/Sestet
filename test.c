@@ -18,8 +18,8 @@ int main(int argc, const char *argv[]) {
     log_init(&log);
     // Two-round appending
     for (i = 0, err = 0; i < (LOG_LEN * 2) && !err; ++i) {
-    	entry.inode_id = rand() & 1023;
-    	entry.block_begin = i;
+    	entry.inode_id = rand() & 255;
+    	entry.block_begin = rand() & 255;
     	err = log_append(&log, &entry);
     }
     log_seal(&log);
@@ -30,10 +30,10 @@ int main(int argc, const char *argv[]) {
     trans_len = LOG_LEN >> 1;
     for (i = 0; i < nr_trans; ++i) {
     	int len = rand() % trans_len;
-    	PRINT("(-1)\t%d\n", len);
+    	PRINT("(-2)\t%d\n", len);
     	for (j = 0, err = 0; j < len && !err; ++j) {
     		entry.inode_id = rand() & 1023;
-    		entry.block_begin = j;
+    		entry.block_begin = rand() & 1023;
     		err = log_append(&log, &entry);
     	}
     	log_seal(&log);

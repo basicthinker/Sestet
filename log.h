@@ -14,8 +14,8 @@
 #include "sys.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
-#define LOG_LEN 128 // 8192 // 8k
-#define LOG_MASK 127 // 8191
+#define LOG_LEN 8192 // 8k
+#define LOG_MASK 8191
 #endif
 
 #define L_INDEX(p) (p & LOG_MASK)
@@ -85,8 +85,8 @@ static inline void __log_seal(struct rffs_log *log) {
     struct transaction *trans;
     unsigned int end = L_END(log);
     if (log->l_head == end) {
-        PRINT("[Warn] log failed to seal: %u-%u-%u\n",
-                L_INDEX(log->l_begin), L_INDEX(log->l_head), L_INDEX(end));
+        PRINT("[Warn] nothing to seal: %u-%u-%u\n",
+                log->l_begin, log->l_head, end);
         return;
     }
     if (end - log->l_begin > LOG_LEN) {

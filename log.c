@@ -70,6 +70,7 @@ int log_sort(struct rffs_log *log, int begin, int end) {
     struct stack_elem elem;
     int p;
     if (begin >= end) return -EINVAL;
+    ADJUST(begin, end);
     stack_push(begin, end - 1);
     while (!stack_empty()) {
         stack_pop(elem);
@@ -110,7 +111,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     	PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);
     	return -ENODATA;
     }
-    ADJUST(begin, end);
+
     PRINT("(-1)\t%d\n", end - begin);
     err = log_sort(log, begin, end);
     if (err) {
