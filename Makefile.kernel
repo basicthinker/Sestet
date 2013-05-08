@@ -1,10 +1,11 @@
-KSRC = /home/basicthinker/Documents/GT-I9260_CHN_JB/Kernel/
+ccflags-y += -Wno-implicit-function-declaration
+KSRC = /usr/src/linux-source-3.0.0
 
 obj-m += rffs.o
 rffs-objs := file.o inode.o log.o
 
 default:
-	$(MAKE) ARCH=arm CROSS_COMPILE=/home/basicthinker/CodeSourcery/Sourcery_G++_Lite/bin/arm-none-linux-gnueabi- -C $(KSRC) SUBDIRS=`pwd` modules
+	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` modules
 
 clean:
 	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` clean

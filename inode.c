@@ -23,8 +23,12 @@
 #include <linux/slab.h>
 #include <asm/uaccess.h>
 
+#include <linux/fs_struct.h>
+#include <linux/mount.h>
+
 #include "hashtable.h"
 #include "rffs.h"
+#include "sys.h"
 
 #define RAMFS_DEFAULT_MODE	0755
 
@@ -237,6 +241,8 @@ int rffs_fill_super(struct super_block *sb, void *data, int silent) {
 
 struct dentry *rffs_mount(struct file_system_type *fs_type, int flags,
         const char *dev_name, void *data) {
+    struct path *root = &current->fs->root;
+    PRINT("[RFFS] %s\n", root->mnt->mnt_sb->s_type->name);
     return mount_nodev(fs_type, flags, data, rffs_fill_super);
 }
 
