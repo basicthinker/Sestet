@@ -35,7 +35,7 @@ static ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 static ssize_t rffs_file_splice_write(struct pipe_inode_info *pipe,
         struct file *out, loff_t *ppos, size_t len, unsigned int flags) {
     struct inode *inode = out->f_mapping->host;
-    printk(KERN_INFO "[sestet-sw]\t%lu\t%lld\t%d\n",
+    printk(KERN_INFO "[rffs-sw]\t%lu\t%lld\t%d\n",
            inode->i_ino, *ppos, len);
     return generic_file_splice_write(pipe, out, ppos, len, flags);
 }
