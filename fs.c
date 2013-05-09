@@ -16,11 +16,16 @@
 
 #include "rffs.h"
 #include "log.h"
+#include "hashtable.h"
 
 #define RFFS_DEFAULT_MODE 0755
 
 struct rffs_mount_opts {
     umode_t mode;
+};
+
+struct rffs_fs_info {
+    struct rffs_mount_opts mount_opts;
 };
 
 enum {
@@ -31,15 +36,15 @@ static const match_table_t tokens = {
     { Opt_mode, "mode=%o" }, { Opt_err, NULL }
 };
 
-struct rffs_fs_info {
-    struct rffs_mount_opts mount_opts;
-};
-
 static const struct super_operations rffs_ops = {
     .statfs = simple_statfs,
     .drop_inode = generic_delete_inode,
     .show_options = generic_show_options,
 };
+
+static struct inode *base_inode;
+DECLARE_HASHTABLE(inode_map, 8);
+struct kmem_cache *rffs_inodep_cachep;
 
 static int rffs_parse_options(char *data, struct rffs_mount_opts *opts) {
     substring_t args[MAX_OPT_ARGS];
@@ -76,6 +81,7 @@ int rffs_fill_super(struct super_block *sb, void *data, int silent) {
     struct rffs_fs_info *fsi;
     struct inode *inode = NULL;
     struct dentry *root;
+    struct inodep *inodep;
     int err;
 
     save_mount_options(sb, data);
@@ -111,8 +117,17 @@ int rffs_fill_super(struct super_block *sb, void *data, int silent) {
         goto fail;
     }
 
+    // Register mapping to base inode
+    inodep = inodep_malloc();
+    inodep->ptr = base_inode;
+    hash_add_inodep(inode_map, inode, inodep);
+#ifdef RFFS_DEBUG
+    PRINT("[RFFS] fill_super adds inode mapping: %lu - %lu\n",
+            inode->i_ino, inodep->ptr->i_ino);
+#endif
     return 0;
-    fail: kfree(fsi);
+
+fail: kfree(fsi);
     sb->s_fs_info = NULL;
     iput(inode);
     return err;
@@ -120,8 +135,7 @@ int rffs_fill_super(struct super_block *sb, void *data, int silent) {
 
 struct dentry *rffs_mount(struct file_system_type *fs_type, int flags,
         const char *dev_name, void *data) {
-    struct path *root = &current->fs->root;
-    PRINT("[RFFS] %s\n", root->mnt->mnt_sb->s_type->name);
+    base_inode = current->fs->root.dentry->d_inode;
     return mount_nodev(fs_type, flags, data, rffs_fill_super);
 }
 
@@ -140,13 +154,22 @@ struct rffs_log rffs_log;
 
 static int __init init_rffs_fs(void) {
     int err;
+
     log_init(&rffs_log);
+    hash_init(inode_map);
+
+    rffs_inodep_cachep = kmem_cache_create(
+            "rffs_inodep_cache", sizeof(struct inodep), 0,
+            (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+    if (!rffs_inodep_cachep) return -ENOMEM;
+
     err = register_filesystem(&rffs_fs_type);
-    if (!err) PRINT("[RFFS] registered successfully.");
+    if (!err) PRINT("[RFFS] registered successfully.\n");
     return err;
 }
 
 static void __exit exit_rffs_fs(void) {
+    kmem_cache_destroy(rffs_inodep_cachep);
     unregister_filesystem(&rffs_fs_type);
 }
 

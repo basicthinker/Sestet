@@ -1,6 +1,19 @@
 #ifndef SESTET_RFFS_H_
 #define SESTET_RFFS_H_
 
+struct inodep {
+    struct inode *ptr;
+    struct hlist_node hnode;
+};
+
+#define hash_add_inodep(hashtable, key, inodep)  \
+		hlist_add_head(&inodep->hnode, &hashtable[hash_32((u32)key, HASH_BITS(hashtable))])
+
+extern struct kmem_cache *rffs_inodep_cachep;
+#define inodep_malloc()  \
+		((struct inodep *)kmem_cache_alloc(rffs_inodep_cachep, GFP_KERNEL))
+#define inodep_free(p) (kmem_cache_free(rffs_inodep_cachep, p))
+
 struct inode *rffs_get_inode(struct super_block *sb, const struct inode *dir,
         int mode, dev_t dev);
 extern struct dentry *rffs_mount(struct file_system_type *fs_type, int flags,

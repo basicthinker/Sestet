@@ -27,8 +27,6 @@ static struct backing_dev_info rffs_backing_dev_info = {
                 | BDI_CAP_EXEC_MAP,
 };
 
-DEFINE_HASHTABLE(inode_map, 8);
-
 struct inode *rffs_get_inode(struct super_block *sb, const struct inode *dir,
         int mode, dev_t dev) {
     struct inode * inode = new_inode(sb);
