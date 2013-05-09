@@ -87,9 +87,22 @@ static int rffs_mkdir(struct inode * dir, struct dentry * dentry, int mode) {
     return retval;
 }
 
+static int rffs_rmdir(struct inode *dir, struct dentry *dentry) {
+    return simple_rmdir(dir, dentry);
+}
+
 static int rffs_create(struct inode *dir, struct dentry *dentry, int mode,
         struct nameidata *nd) {
     return rffs_mknod(dir, dentry, mode | S_IFREG, 0);
+}
+
+static int rffs_link(struct dentry *old_dentry,
+        struct inode *dir, struct dentry *dentry) {
+    return simple_link(old_dentry, dir, dentry);
+}
+
+static int rffs_unlink(struct inode *dir, struct dentry *dentry) {
+    return simple_unlink(dir, dentry);
 }
 
 static int rffs_symlink(struct inode * dir, struct dentry *dentry,
@@ -111,16 +124,26 @@ static int rffs_symlink(struct inode * dir, struct dentry *dentry,
     return error;
 }
 
+static int rffs_rename(struct inode *old_dir, struct dentry *old_dentry,
+        struct inode *new_dir, struct dentry *new_dentry) {
+    return simple_rename(old_dir, old_dentry, new_dir, new_dentry);
+}
+
+static int rffs_setattr(struct dentry *dentry, struct iattr *iattr) {
+    return simple_setattr(dentry, iattr);
+}
+
 static const struct inode_operations rffs_dir_inode_operations = {
     .create = rffs_create,
     .lookup = simple_lookup,
-    .link = simple_link,
-    .unlink = simple_unlink,
+    .link = rffs_link,
+    .unlink = rffs_unlink,
     .symlink = rffs_symlink,
     .mkdir = rffs_mkdir,
-    .rmdir = simple_rmdir,
+    .rmdir = rffs_rmdir,
     .mknod = rffs_mknod,
-    .rename = simple_rename,
+    .rename = rffs_rename,
+    .setattr = rffs_setattr,
 };
 
 
