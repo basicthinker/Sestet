@@ -9,15 +9,12 @@
  * This file is released under the GPL.
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/pagemap.h>
 
 #include "hashtable.h"
 #include "rffs.h"
-
-#define RAMFS_DEFAULT_MODE	0755
 
 static const struct super_operations rffs_ops;
 static const struct inode_operations rffs_dir_inode_operations;
@@ -128,9 +125,4 @@ static const struct inode_operations rffs_dir_inode_operations = {
     .rename = simple_rename,
 };
 
-static const struct super_operations rffs_ops = {
-    .statfs = simple_statfs,
-    .drop_inode = generic_delete_inode,
-    .show_options = generic_show_options,
-};
 

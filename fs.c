@@ -5,10 +5,19 @@
  *      Author: Jinglei Ren <jinglei.ren@gmail.com>
  */
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/pagemap.h>
 #include <linux/fs_struct.h>
 #include <linux/mount.h>
+#include <linux/parser.h>
+#include <linux/string.h>
+#include <linux/magic.h>
 
+#include "rffs.h"
 #include "log.h"
+
+#define RFFS_DEFAULT_MODE 0755
 
 struct rffs_mount_opts {
     umode_t mode;
@@ -26,13 +35,19 @@ struct rffs_fs_info {
     struct rffs_mount_opts mount_opts;
 };
 
+static const struct super_operations rffs_ops = {
+    .statfs = simple_statfs,
+    .drop_inode = generic_delete_inode,
+    .show_options = generic_show_options,
+};
+
 static int rffs_parse_options(char *data, struct rffs_mount_opts *opts) {
     substring_t args[MAX_OPT_ARGS];
     int option;
     int token;
     char *p;
 
-    opts->mode = RAMFS_DEFAULT_MODE;
+    opts->mode = RFFS_DEFAULT_MODE;
 
     while ((p = strsep(&data, ",")) != NULL ) {
         if (!*p)
@@ -124,16 +139,19 @@ static struct file_system_type rffs_fs_type = {
 struct rffs_log rffs_log;
 
 static int __init init_rffs_fs(void) {
-    log_init(&log);
-    return register_filesystem(&rffs_fs_type);
+    int err;
+    log_init(&rffs_log);
+    err = register_filesystem(&rffs_fs_type);
+    if (!err) PRINT("[RFFS] registered successfully.");
+    return err;
 }
 
 static void __exit exit_rffs_fs(void) {
     unregister_filesystem(&rffs_fs_type);
 }
 
-module_init(init_rffs_fs)
-module_exit(exit_rffs_fs)
+module_init(init_rffs_fs);
+module_exit(exit_rffs_fs);
 
 MODULE_LICENSE("GPL");
 

@@ -18,7 +18,6 @@ extern int rffs_nommu_mmap(struct file *file, struct vm_area_struct *vma);
 extern struct rffs_log rffs_log;
 extern const struct file_operations rffs_file_operations;
 extern const struct vm_operations_struct generic_file_vm_ops;
-extern int __init init_rffs_fs(void);
 
 int rffs_fill_super(struct super_block *sb, void *data, int silent);
 
