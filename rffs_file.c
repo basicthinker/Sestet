@@ -7,6 +7,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/atomic.h>
 #include <linux/fs.h>
 #include <asm/errno.h>
 
@@ -14,15 +15,15 @@
 #include "log.h"
 #include "hashtable.h"
 
-#define RE_LOG_LEN 25
 #define RLOG_HASH_BITS 10
+#define MAX_LOG_NUM 20
 
-static struct rffs_log rffs_log;
+static struct rffs_log rffs_log[MAX_LOG_NUM];
+static atomic_t logi;
 
 struct rlog {
-	int enti[RE_LOG_LEN];
-	int top;
 	struct hlist_node hnode;
+	int enti;
 };
 
 static struct kmem_cache *rffs_rlog_cachep;
@@ -38,11 +39,20 @@ static DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 
 int init_rffs(void)
 {
-	log_init(&rffs_log);
+	atomic_set(&logi, -1);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog), 0,
 			(SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	if (!rffs_rlog_cachep) return -ENOMEM;
 	return 0;
+}
+
+int rffs_mount(void)
+{
+	int li = atomic_inc_return(&logi);
+	if (li < MAX_LOG_NUM) {
+		log_init(rffs_log + li);
+		return 0;
+	} else return -ENOSPC;
 }
 
 void exit_rffs(void)

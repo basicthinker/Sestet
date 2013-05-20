@@ -6,8 +6,8 @@
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
-#ifndef SESTET_RFFS_LOG_H_
-#define SESTET_RFFS_LOG_H_
+#ifndef RFFS_LOG_H_
+#define RFFS_LOG_H_
 
 #include <linux/types.h>
 #include <asm/errno.h>
