@@ -1,8 +1,7 @@
-ccflags-y += -Wno-implicit-function-declaration
 KSRC = /usr/src/linux-source-3.0.0
 
 obj-m += rffs.o
-rffs-objs := fs.o file.o inode.o log.o
+rffs-objs := inode.o file.o rffs_file.o
 
 default:
 	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` modules
