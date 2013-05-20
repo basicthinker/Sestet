@@ -6,6 +6,8 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
+#include <linux/file.h>
+#include <linux/blkdev.h>
 #include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/fs.h>
@@ -60,9 +62,33 @@ void exit_rffs(void)
 	kmem_cache_destroy(rffs_rlog_cachep);
 }
 
+// mm/filemap.c
+
+
+// mm/filemap.c
 ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos)
 {
-	return generic_file_aio_write(iocb, iov, nr_segs, pos);
+    struct file *file = iocb->ki_filp;
+    struct inode *inode = file->f_mapping->host;
+    struct blk_plug plug;
+    ssize_t ret;
+
+    BUG_ON(iocb->ki_pos != pos);
+
+    mutex_lock(&inode->i_mutex);
+    blk_start_plug(&plug);
+    ret = __generic_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
+    mutex_unlock(&inode->i_mutex);
+
+    if (ret > 0 || ret == -EIOCBQUEUED) {
+            ssize_t err;
+
+            err = generic_write_sync(file, pos, ret);
+            if (err < 0 && ret > 0)
+                    ret = err;
+    }
+    blk_finish_plug(&plug);
+    return ret;
 }
 
