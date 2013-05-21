@@ -14,6 +14,9 @@
 struct kiocb;
 struct inovec;
 
+extern struct page *rffs_grab_cache_page_write_begin(struct address_space *mapping,
+					pgoff_t index, unsigned flags);
+
 extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos);
 
