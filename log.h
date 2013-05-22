@@ -16,22 +16,18 @@
 #include "policy.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
-#define LOG_LEN 8192 // 8k
-#define LOG_MASK 8191
+    #define LOG_LEN 8192 // 8k
+    #define LOG_MASK 8191
 #endif
 
 #define L_INDEX(p) (p & LOG_MASK)
 
-#define ADJUST(a, b) do {       \
-    a &= LOG_MASK;              \
-    b &= LOG_MASK;              \
-    if (a >= b) b += LOG_LEN;    \
-} while(0)
+#define DIST(a, b) (a <= b ? b - a : UINT_MAX - a + b + 1)
 
 struct log_entry {
-    unsigned long int inode_id;
-    unsigned long int block_begin; // FFFFFFFF denotes inode entry
-    void *data; // refers to inode info when this is inode entry
+    unsigned long inode_id;
+    unsigned long block_begin;
+    void *data;
 };
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
@@ -59,17 +55,18 @@ struct rffs_log {
     unsigned int l_head; // begin of active entries
     atomic_t l_end;
     struct list_head l_trans;
-    enum l_order l_order;  // 'b' means log_begin <= log_head < log_end
     spinlock_t l_lock; // to protect the prepared entries
 };
 
 #define L_END(log) (atomic_read(&log->l_end))
 
+#define log_head_tran(log)	\
+	list_first_entry(&log->l_trans, struct transaction, list)
+
 static inline void log_init(struct rffs_log *log) {
     log->l_begin = 0;
     log->l_head = 0;
     atomic_set(&log->l_end, 0);
-    log->l_order = L_BEGIN;
     INIT_LIST_HEAD(&log->l_trans);
     spin_lock_init(&log->l_lock);
 }
@@ -92,7 +89,7 @@ static inline void __log_seal(struct rffs_log *log) {
                 log->l_begin, log->l_head, end);
         return;
     }
-    if (end - log->l_begin > LOG_LEN) {
+    if (DIST(log->l_begin, end) > LOG_LEN) {
         end = log->l_begin + LOG_LEN;
     }
     tran = (struct transaction *)MALLOC(sizeof(struct transaction));
@@ -102,8 +99,6 @@ static inline void __log_seal(struct rffs_log *log) {
     list_add_tail(&tran->list, &log->l_trans);
 
     log->l_head = tran->end;
-    if (log->l_order == L_END && L_INDEX(log->l_head) <= L_INDEX(log->l_begin))
-        log->l_order = L_HEAD;
 }
 
 static inline void log_seal(struct rffs_log *log) {
@@ -112,14 +107,14 @@ static inline void log_seal(struct rffs_log *log) {
     spin_unlock(&log->l_lock);
 }
 
-static inline int log_append(struct rffs_log *log, struct log_entry *entry) {
-    unsigned int tail = atomic_inc_return(&log->l_end) - 1;
-    int err;
-    // We assume that the order is not changed immediately
-    if (L_INDEX(tail) == LOG_MASK) log->l_order = L_END;
-    if (tail - log->l_begin >= LOG_LEN) {
+static inline int log_append(struct rffs_log *log, struct log_entry *entry,
+		unsigned int *enti) {
+	int err;
+    unsigned int tail = (unsigned int)atomic_inc_return(&log->l_end) - 1;
+
+    if (DIST(log->l_begin, tail) >= LOG_LEN) {
         spin_lock(&log->l_lock);
-        while (tail - log->l_begin >= LOG_LEN) {
+        while (DIST(log->l_begin, tail) >= LOG_LEN) {
             err = __log_flush(log, 1);
             if (err == -ENODATA) {
                 __log_seal(log);
@@ -135,6 +130,7 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry) {
         spin_unlock(&log->l_lock);
     }
     log->l_entries[L_INDEX(tail)] = *entry;
+    if (likely(enti)) *enti = tail;
     return 0;
 }
 

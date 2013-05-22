@@ -20,7 +20,7 @@ int main(int argc, const char *argv[]) {
     for (i = 0, err = 0; i < (LOG_LEN * 2) && !err; ++i) {
     	entry.inode_id = rand() & 255;
     	entry.block_begin = rand() & 255;
-    	err = log_append(&log, &entry);
+    	err = log_append(&log, &entry, NULL);
     }
     log_seal(&log);
     log_flush(&log, LOG_LEN);
@@ -34,7 +34,7 @@ int main(int argc, const char *argv[]) {
     	for (j = 0, err = 0; j < len && !err; ++j) {
     		entry.inode_id = rand() & 1023;
     		entry.block_begin = rand() & 1023;
-    		err = log_append(&log, &entry);
+    		err = log_append(&log, &entry, NULL);
     	}
     	log_seal(&log);
     	if ((i & 1) == 1) log_flush(&log, 2);

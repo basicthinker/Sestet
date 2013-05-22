@@ -69,8 +69,10 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
 int log_sort(struct rffs_log *log, int begin, int end) {
     struct stack_elem elem;
     int p;
-    if (begin >= end) return -EINVAL;
-    ADJUST(begin, end);
+    if (begin > end) {
+        begin -= LOG_LEN;
+        end -= LOG_LEN;
+    }
     stack_push(begin, end - 1);
     while (!stack_empty()) {
         stack_pop(elem);
@@ -92,19 +94,19 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int i;
     int err;
     struct log_entry *entries = log->l_entries;
-    struct transaction *trans;
+    struct transaction *tran;
 
     begin = end = log->l_begin;
     while (nr && !list_empty(&log->l_trans)) {
-        trans = list_entry(log->l_trans.next, struct transaction, list);
-        if (trans->begin != end) {
+        tran = list_entry(log->l_trans.next, struct transaction, list);
+        if (tran->begin != end) {
             PRINT("[Err] Transactions do not join: %u <-> %u\n",
-                    end, trans->begin);
+                    end, tran->begin);
             return -EFAULT;
         }
-        end = trans->end;
-        list_del(&trans->list);
-        MFREE(trans);
+        end = tran->end;
+        list_del(&tran->list);
+        MFREE(tran);
         --nr;
     }
     if (begin == end) {
@@ -116,10 +118,10 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     err = log_sort(log, begin, end);
     if (err) {
         PRINT("[Err%d] log_sort() failed.\n", err);
-        trans = (struct transaction *)MALLOC(sizeof(struct transaction));
-        trans->begin = begin;
-        trans->end = end;
-        list_add(&trans->list, &log->l_trans);
+        tran = (struct transaction *)MALLOC(sizeof(struct transaction));
+        tran->begin = begin;
+        tran->end = end;
+        list_add(&tran->list, &log->l_trans);
         return -EAGAIN;
     }
     for (i = begin; i < end; ++i) {
@@ -127,8 +129,6 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
 
     log->l_begin = end;
-    if (log->l_order == L_HEAD && L_INDEX(log->l_begin) <= L_INDEX(log->l_head))
-        log->l_order = L_BEGIN;
 
     return 0;
 }

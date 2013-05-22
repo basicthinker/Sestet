@@ -9,6 +9,8 @@
 #ifndef SESTET_RFFS_SYS_H_
 #define SESTET_RFFS_SYS_H_
 
+#define UINT_MAX (~0U)
+
 #ifdef __KERNEL__ // Linux kernel space
     #include <linux/slab.h>
     #define MALLOC(size) kmalloc(size, GFP_KERNEL)
@@ -46,6 +48,7 @@
 
 #ifndef __KERNEL__
 	#include "atomic.h"
+    #define likely(cond) (cond)
 #endif
 
 #endif // SESTET_RFFS_SYS_H_
