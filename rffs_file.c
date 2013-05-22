@@ -16,6 +16,7 @@
 
 #include "rffs.h"
 #include "log.h"
+#include "policy.h"
 #include "hashtable.h"
 
 #define RLOG_HASH_BITS 10

@@ -11,7 +11,9 @@
 
 #include <linux/types.h>
 #include <asm/errno.h>
+
 #include "sys.h"
+#include "policy.h"
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
 #define LOG_LEN 8192 // 8k
@@ -41,6 +43,7 @@ static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 struct transaction {
     unsigned int begin;
     unsigned int end;
+    struct tran_stat stat;
     struct list_head list;
 };
 
@@ -82,7 +85,7 @@ static inline int log_flush(struct rffs_log *log, unsigned int nr) {
 }
 
 static inline void __log_seal(struct rffs_log *log) {
-    struct transaction *trans;
+    struct transaction *tran;
     unsigned int end = L_END(log);
     if (log->l_head == end) {
         PRINT("[Warn] nothing to seal: %u-%u-%u\n",
@@ -92,13 +95,13 @@ static inline void __log_seal(struct rffs_log *log) {
     if (end - log->l_begin > LOG_LEN) {
         end = log->l_begin + LOG_LEN;
     }
-    trans = (struct transaction *)MALLOC(sizeof(struct transaction));
+    tran = (struct transaction *)MALLOC(sizeof(struct transaction));
 
-    trans->begin = log->l_head;
-    trans->end = end;
-    list_add_tail(&trans->list, &log->l_trans);
+    tran->begin = log->l_head;
+    tran->end = end;
+    list_add_tail(&tran->list, &log->l_trans);
 
-    log->l_head = trans->end;
+    log->l_head = tran->end;
     if (log->l_order == L_END && L_INDEX(log->l_head) <= L_INDEX(log->l_begin))
         log->l_order = L_HEAD;
 }
