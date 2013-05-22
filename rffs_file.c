@@ -40,7 +40,7 @@ static DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 #define hash_add_rlog(hashtable, key, rlogp) \
 	hlist_add_head(rlogp->hnode, &hashtable[hash_32((u32)key, RLOG_HASH_BITS)])
 
-int init_rffs(void)
+int rffs_init_hook(void)
 {
 	atomic_set(&logi, -1);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
@@ -50,20 +50,22 @@ int init_rffs(void)
 	return 0;
 }
 
-int rffs_mount(void)
+void rffs_exit_hook(void)
+{
+	kmem_cache_destroy(rffs_rlog_cachep);
+}
+
+int rffs_fill_super_hook(struct inode *root_inode)
 {
 	int li = atomic_inc_return(&logi);
 	if (li < MAX_LOG_NUM) {
 		log_init(rffs_log + li);
+		root_inode->i_private = (void *)li;
 		return 0;
 	} else
 		return -ENOSPC;
 }
 
-void exit_rffs(void)
-{
-	kmem_cache_destroy(rffs_rlog_cachep);
-}
 
 // mm/filemap.c
 /*
@@ -100,6 +102,7 @@ found:
 	//TODO
 	return page;
 }
+
 
 // mm/filemap.c
 static ssize_t rffs_perform_write(struct file *file,
