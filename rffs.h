@@ -26,8 +26,6 @@ extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 extern int rffs_init_hook(void);
 extern void rffs_exit_hook(void);
 
-extern int rffs_fill_super_hook(struct inode *root_inode);
-
 static void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode)
 {
 	if (dir) {

@@ -6,6 +6,8 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
+#include "list.h" // overrides linux/list.h
+
 #include <linux/file.h>
 #include <linux/blkdev.h>
 #include <linux/types.h>
@@ -22,12 +24,13 @@
 #define RLOG_HASH_BITS 10
 #define MAX_LOG_NUM 20
 
-static struct rffs_log rffs_log[MAX_LOG_NUM];
+struct rffs_log rffs_logs[MAX_LOG_NUM];
 static atomic_t logi;
 
 struct rlog {
+	struct page *key;
 	struct hlist_node hnode;
-	int enti;
+	unsigned int enti;
 };
 
 static struct kmem_cache *rffs_rlog_cachep;
@@ -38,12 +41,25 @@ static struct kmem_cache *rffs_rlog_cachep;
 
 static DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 
-#define hash_add_rlog(hashtable, key, rlogp) \
-	hlist_add_head(rlogp->hnode, &hashtable[hash_32((u32)key, RLOG_HASH_BITS)])
+#define hash_add_rlog(hashtable, rlog) \
+	hlist_add_head(&rlog->hnode, &hashtable[hash_32((u32)rlog->key, RLOG_HASH_BITS)])
+
+#define for_each_possible_rlog(hashtable, obj, key)	\
+	hlist_for_each_entry(obj, &hashtable[hash_32((u32)key, RLOG_HASH_BITS)], hnode)
+
+static inline struct rlog *hash_find_rlog(struct hlist_head hashtable[],
+		struct page *key)
+{
+	struct rlog *rl;
+	for_each_possible_rlog(hashtable, rl, key) {
+		if (rl->key == key) return rl;
+	}
+	return NULL;
+}
 
 int rffs_init_hook(void)
 {
-	atomic_set(&logi, -1);
+	atomic_set(&logi, 0);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL );
 	if (!rffs_rlog_cachep)
@@ -56,52 +72,67 @@ void rffs_exit_hook(void)
 	kmem_cache_destroy(rffs_rlog_cachep);
 }
 
-int rffs_fill_super_hook(struct inode *root_inode)
+static inline struct rlog *rffs_try_attach_rlog(struct inode *host,
+		struct page* page)
 {
-	int li = atomic_inc_return(&logi);
-	if (li < MAX_LOG_NUM) {
-		log_init(rffs_log + li);
-		root_inode->i_private = (void *)li;
-		return 0;
-	} else
-		return -ENOSPC;
+	struct rlog *rl;
+	int li = (int)host->i_private;
+	struct rffs_log *log = rffs_logs + li;
+
+	BUG_ON(li > MAX_LOG_NUM);
+
+	rl = hash_find_rlog(page_rlog, page);
+
+	if (!rl || LESS(rl->enti, log->l_head)) { // new page
+		BUG_ON(rl && LESS(rl->enti, log->l_begin));
+
+		if (rl && LESS(rl->enti, log->l_head)) {
+			//TODO COW, rehash rl
+		}
+
+		rl = rlog_malloc();
+		rl->key = page;
+		hash_add_rlog(page_rlog, rl);
+		return rl;
+	} else return NULL; // no new rlog
 }
 
-
-// mm/filemap.c
-/*
- * Find or create a page at the given pagecache position. Return the locked
- * page. This function is specifically for buffered writes.
- */
-struct page *rffs_grab_cache_page_write_begin(struct address_space *mapping,
-					pgoff_t index, unsigned flags)
+static inline int rffs_try_append(struct inode *host, struct rlog* rl,
+		unsigned long size)
 {
-	int status;
-	struct page *page;
-	gfp_t gfp_notmask = 0;
-	if (flags & AOP_FLAG_NOFS)
-		gfp_notmask = __GFP_FS;
-repeat:
-	page = find_lock_page(mapping, index);
-	if (page)
-		goto found;
+	int err = 0;
+	int li = (int)host->i_private;
+	struct rffs_log *log = rffs_logs + li;
 
-	page = __page_cache_alloc(mapping_gfp_mask(mapping) & ~gfp_notmask);
-	if (!page)
-		return NULL;
-	//TODO
-	status = add_to_page_cache_lru(page, mapping, index,
-						GFP_KERNEL & ~gfp_notmask);
-	if (unlikely(status)) {
-		page_cache_release(page);
-		if (status == -EEXIST)
-			goto repeat;
-		return NULL;
+	BUG_ON(li > MAX_LOG_NUM);
+
+	if (!rl) {
+		struct transaction *tran = log_head_tran(log);
+		on_write_old_page(tran->stat, size);
+#ifdef RFFS_TRACE
+		printk(KERN_INFO "[rffs] for log(%d) old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+				tran->stat.merg_size, tran->stat.latency);
+#endif
+	} else {
+		unsigned int ei;
+		struct log_entry ent;
+
+		ent.inode_id = host->i_ino;
+		ent.block_begin = ((struct page *)rl->key)->index;
+		ent.data = rl->key;
+
+		err = log_append(log, &ent, &ei);
+		if (likely(!err)) {
+			struct transaction *tran = log_head_tran(log);
+			on_write_new_page(tran->stat, size);
+#ifdef RFFS_TRACE
+			printk(KERN_INFO "[rffs] for log(%d) new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+					tran->stat.merg_size, tran->stat.latency);
+#endif
+			rl->enti = ei;
+		}
 	}
-found:
-	wait_on_page_writeback(page);
-	//TODO
-	return page;
+	return err;
 }
 
 
@@ -127,6 +158,9 @@ static ssize_t rffs_perform_write(struct file *file,
 		unsigned long bytes;	/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
 		void *fsdata;
+
+		struct rlog *rl = NULL;
+		int re_entry = 0;
 
 		offset = (pos & (PAGE_CACHE_SIZE - 1));
 		bytes = min_t(unsigned long, PAGE_CACHE_SIZE - offset,
@@ -157,6 +191,8 @@ again:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
+		if (!re_entry) rl = rffs_try_attach_rlog(mapping->host, page);
+
 		pagefault_disable();
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		pagefault_enable();
@@ -183,10 +219,13 @@ again:
 			 */
 			bytes = min_t(unsigned long, PAGE_CACHE_SIZE - offset,
 						iov_iter_single_seg_count(i));
+			re_entry = 1;
 			goto again;
 		}
 		pos += copied;
 		written += copied;
+
+		rffs_try_append(mapping->host, rl, copied);
 
 		//TODO
 		//balance_dirty_pages_ratelimited(mapping);
@@ -197,7 +236,7 @@ again:
 }
 
 // mm/filemap.c
-static ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
+static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos, loff_t *ppos, size_t count,
 		ssize_t written)
 {
@@ -217,7 +256,7 @@ static ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct iovec *
 }
 
 // mm/filemap.c
-static ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
+static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t *ppos)
 {
 	struct file *file = iocb->ki_filp;
