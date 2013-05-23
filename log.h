@@ -24,6 +24,8 @@
 
 #define DIST(a, b) (a <= b ? b - a : UINT_MAX - a + b + 1)
 
+#define LESS(a, b) (a != b && DIST(a, b) <= LOG_LEN)
+
 struct log_entry {
     unsigned long inode_id;
     unsigned long block_begin;
@@ -41,12 +43,6 @@ struct transaction {
     unsigned int end;
     struct tran_stat stat;
     struct list_head list;
-};
-
-enum l_order {
-    L_BEGIN,
-    L_HEAD,
-    L_END
 };
 
 struct rffs_log {
