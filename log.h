@@ -50,6 +50,8 @@ struct transaction {
 	init_stat(tran->stat);			\
 } while(0)
 
+#define is_tran_open(tran) (tran->begin == tran->end)
+
 struct rffs_log {
     struct log_entry l_entries[LOG_LEN];
     unsigned int l_begin; // begin of prepared entries
@@ -61,6 +63,15 @@ struct rffs_log {
 
 #define L_END(log) (atomic_read(&log->l_end))
 
+static inline struct transaction *__log_add_tran(struct rffs_log *log)
+{
+	struct transaction *tran =
+				(struct transaction *)MALLOC(sizeof(struct transaction));
+	init_tran(tran);
+	list_add_tail(&tran->list, &log->l_trans);
+	return tran;
+}
+
 #define log_tail_tran(log)	\
 	list_entry(log->l_trans.prev, struct transaction, list)
 
@@ -70,6 +81,7 @@ static inline void log_init(struct rffs_log *log) {
     atomic_set(&log->l_end, 0);
     INIT_LIST_HEAD(&log->l_trans);
     spin_lock_init(&log->l_lock);
+    __log_add_tran(log);
 }
 
 extern int __log_flush(struct rffs_log *log, unsigned int nr);
@@ -83,7 +95,7 @@ static inline int log_flush(struct rffs_log *log, unsigned int nr) {
 }
 
 static inline void __log_seal(struct rffs_log *log) {
-    struct transaction *tran;
+    struct transaction *tran = log_tail_tran(log);
     unsigned int end = L_END(log);
     if (log->l_head == end) {
         PRINT("[Warn] nothing to seal: %u-%u-%u\n",
@@ -93,14 +105,12 @@ static inline void __log_seal(struct rffs_log *log) {
     if (DIST(log->l_begin, end) > LOG_LEN) {
         end = log->l_begin + LOG_LEN;
     }
-    tran = (struct transaction *)MALLOC(sizeof(struct transaction));
-    init_tran(tran);
 
     tran->begin = log->l_head;
     tran->end = end;
-    list_add_tail(&tran->list, &log->l_trans);
-
     log->l_head = tran->end;
+
+    __log_add_tran(log);
 }
 
 static inline void log_seal(struct rffs_log *log) {
