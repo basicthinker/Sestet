@@ -98,7 +98,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
 
     begin = end = log->l_begin;
     while (nr && !list_empty(&log->l_trans)) {
-        tran = list_entry(log->l_trans.next, struct transaction, list);
+        tran = list_first_entry(&log->l_trans, struct transaction, list);
         if (tran->begin != end) {
             PRINT("[Err] Transactions do not join: %u <-> %u\n",
                     end, tran->begin);

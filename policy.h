@@ -15,6 +15,12 @@ struct tran_stat {
 	unsigned long latency;
 };
 
+#define init_stat(stat) do {	\
+	stat.merg_size = 0;			\
+	stat.staleness = 0;			\
+	stat.latency = 0;			\
+} while(0)
+
 #define opt_ratio(tran_stat)	\
 	((float)tran_stat.merg_size/tran_stat.staleness)
 #define ls_ratio(tran_stat)	\
@@ -27,7 +33,7 @@ struct tran_stat {
 
 #define on_write_new_page(tran_stat, size) {	\
 	tran_stat.staleness += size;				\
-	tran_stat.latency += size;				\
+	tran_stat.latency += 1;						\
 }
 
 #endif /* RFFS_POLICY_H_ */

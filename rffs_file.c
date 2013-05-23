@@ -61,7 +61,7 @@ int rffs_init_hook(void)
 {
 	atomic_set(&logi, 0);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
-			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL );
+			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	if (!rffs_rlog_cachep)
 		return -ENOMEM;
 	return 0;
@@ -76,7 +76,7 @@ static inline struct rlog *rffs_try_attach_rlog(struct inode *host,
 		struct page* page)
 {
 	struct rlog *rl;
-	int li = (int)host->i_private;
+	unsigned int li = (unsigned int)host->i_private;
 	struct rffs_log *log = rffs_logs + li;
 
 	BUG_ON(li > MAX_LOG_NUM);
@@ -107,7 +107,7 @@ static inline int rffs_try_append(struct inode *host, struct rlog* rl,
 	BUG_ON(li > MAX_LOG_NUM);
 
 	if (!rl) {
-		struct transaction *tran = log_head_tran(log);
+		struct transaction *tran = log_tail_tran(log);
 		on_write_old_page(tran->stat, size);
 #ifdef RFFS_TRACE
 		printk(KERN_INFO "[rffs] for log(%d) old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
@@ -123,13 +123,13 @@ static inline int rffs_try_append(struct inode *host, struct rlog* rl,
 
 		err = log_append(log, &ent, &ei);
 		if (likely(!err)) {
-			struct transaction *tran = log_head_tran(log);
+			struct transaction *tran = log_tail_tran(log);
 			on_write_new_page(tran->stat, size);
+			rl->enti = ei;
 #ifdef RFFS_TRACE
 			printk(KERN_INFO "[rffs] for log(%d) new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 					tran->stat.merg_size, tran->stat.latency);
 #endif
-			rl->enti = ei;
 		}
 	}
 	return err;
@@ -321,6 +321,7 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	ret = __rffs_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
 	mutex_unlock(&inode->i_mutex);
 
+	/*
 	if (ret > 0 || ret == -EIOCBQUEUED) {
 		ssize_t err;
 
@@ -328,6 +329,7 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		if (err < 0 && ret > 0)
 			ret = err;
 	}
+	*/
 	blk_finish_plug(&plug);
 	return ret;
 }

@@ -45,6 +45,11 @@ struct transaction {
     struct list_head list;
 };
 
+#define init_tran(tran) do {		\
+	tran->begin = tran->end = 0;	\
+	init_stat(tran->stat);			\
+} while(0)
+
 struct rffs_log {
     struct log_entry l_entries[LOG_LEN];
     unsigned int l_begin; // begin of prepared entries
@@ -56,8 +61,8 @@ struct rffs_log {
 
 #define L_END(log) (atomic_read(&log->l_end))
 
-#define log_head_tran(log)	\
-	list_first_entry(&log->l_trans, struct transaction, list)
+#define log_tail_tran(log)	\
+	list_entry(log->l_trans.prev, struct transaction, list)
 
 static inline void log_init(struct rffs_log *log) {
     log->l_begin = 0;
@@ -89,6 +94,7 @@ static inline void __log_seal(struct rffs_log *log) {
         end = log->l_begin + LOG_LEN;
     }
     tran = (struct transaction *)MALLOC(sizeof(struct transaction));
+    init_tran(tran);
 
     tran->begin = log->l_head;
     tran->end = end;
