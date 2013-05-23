@@ -1,4 +1,4 @@
-ccflags-y += -DRFFS_TRACE
+ccflags-y += -DRFFS_TRACE -DRFFS_DEBUG
 KSRC = /home/basicthinker/Documents/GT-I9260_CHN_JB/Kernel/
 
 obj-m += rffs.o

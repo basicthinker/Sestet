@@ -16,10 +16,10 @@
 #include <linux/swap.h>
 #include <asm/errno.h>
 
-#include "rffs.h"
 #include "log.h"
 #include "policy.h"
 #include "hashtable.h"
+#include "rffs.h"
 
 #define RLOG_HASH_BITS 10
 #define MAX_LOG_NUM 20
@@ -60,6 +60,7 @@ static inline struct rlog *hash_find_rlog(struct hlist_head hashtable[],
 int rffs_init_hook(void)
 {
 	atomic_set(&logi, 0);
+	log_init(&rffs_logs[0]);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	if (!rffs_rlog_cachep)
