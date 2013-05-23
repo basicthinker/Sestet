@@ -6,7 +6,8 @@
 #ifndef _LINUX_HASHTABLE_H
 #define _LINUX_HASHTABLE_H
 
-#include <linux/list.h>
+#include "list.h" // overrides linux/list.h
+
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/hash.h>
