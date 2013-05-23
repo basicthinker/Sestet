@@ -39,6 +39,8 @@
 #include <asm/uaccess.h>
 #include "internal.h"
 
+#include "rffs.h"
+
 #define RAMFS_DEFAULT_MODE	0755
 
 static const struct super_operations ramfs_ops;
@@ -275,11 +277,14 @@ static struct file_system_type ramfs_fs_type = {
 
 static int __init init_ramfs_fs(void)
 {
+	int err = rffs_init_hook();
+	if (err) return err;
 	return register_filesystem(&ramfs_fs_type);
 }
 
 static void __exit exit_ramfs_fs(void)
 {
+	rffs_exit_hook();
 	unregister_filesystem(&ramfs_fs_type);
 }
 

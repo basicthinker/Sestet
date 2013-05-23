@@ -29,6 +29,7 @@
 #include <linux/ramfs.h>
 
 #include "internal.h"
+#include "rffs.h"
 
 // Ported from /mm/page-writeback.c for linking
 int __set_page_dirty_no_writeback(struct page *page)
@@ -49,7 +50,7 @@ const struct file_operations ramfs_file_operations = {
 	.read		= do_sync_read,
 	.aio_read	= generic_file_aio_read,
 	.write		= do_sync_write,
-	.aio_write	= generic_file_aio_write,
+	.aio_write	= rffs_file_aio_write,
 	.mmap		= generic_file_mmap,
 	.fsync		= noop_fsync,
 	.splice_read	= generic_file_splice_read,
