@@ -1,11 +1,15 @@
 CC = gcc
 CFLAGS += -g -Wall -pthread
 LIB = -lpthread
-SOURCES = log.c test.c
 HEADERS = log.h sys.h list.h atomic.h
 
-all : $(SOURCES) $(HEADERS)
-	$(CC) $(CFLAGS) $(LIB) -o test.o $^
+all : test-sort test-trace
+
+test-sort : log.c test-sort.c $(HEADERS)
+	$(CC) $(CFLAGS) $(LIB) -o test-sort.out $^
+
+test-trace : test-trace.c
+	$(CC) $(CFLAGS) $(LIB) -o test-trace.out $^
 
 clean :
-	rm -rf *.o
+	rm -rf *.out
