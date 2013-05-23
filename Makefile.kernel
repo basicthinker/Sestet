@@ -1,7 +1,8 @@
+ccflags-y += -DRFFS_TRACE
 KSRC = /usr/src/linux-source-3.0.0
 
 obj-m += rffs.o
-rffs-objs := inode.o file.o rffs_file.o
+rffs-objs := inode.o file.o rffs_file.o log.o
 
 default:
 	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` modules
