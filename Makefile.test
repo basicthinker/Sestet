@@ -3,13 +3,16 @@ CFLAGS += -g -Wall -pthread
 LIB = -lpthread
 HEADERS = log.h sys.h list.h atomic.h
 
-all : test-sort test-trace
+all : test-sort test-trace test-energy
 
 test-sort : log.c test-sort.c $(HEADERS)
 	$(CC) $(CFLAGS) $(LIB) -o test-sort.out $^
 
 test-trace : test-trace.c
 	$(CC) $(CFLAGS) $(LIB) -o test-trace.out $^
+
+test-energy : test-energy.c
+	/home/basicthinker/CodeSourcery/Sourcery_G++_Lite/bin/arm-none-linux-gnueabi-gcc -static -march=armv7-a -Wall -o test-energy.o $^
 
 clean :
 	rm -rf *.out

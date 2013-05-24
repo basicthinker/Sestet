@@ -2,7 +2,7 @@ ccflags-y += -DRFFS_TRACE -DRFFS_DEBUG
 KSRC = /home/basicthinker/Documents/GT-I9260_CHN_JB/Kernel/
 
 obj-m += rffs.o
-rffs-objs := inode.o file.o rffs_file.o
+rffs-objs := inode.o file.o rffs_file.o log.o
 
 default:
 	$(MAKE) ARCH=arm CROSS_COMPILE=/home/basicthinker/CodeSourcery/Sourcery_G++_Lite/bin/arm-none-linux-gnueabi- -C $(KSRC) SUBDIRS=`pwd` modules
