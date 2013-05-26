@@ -6,12 +6,15 @@
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
+#ifdef __KERNEL__
+#include "rlog.h"
+#endif
 #include "log.h"
 
 #define CUT_OFF 4
 #define STACK_SIZE 32
 
-#define entries(i) (entries[i & LOG_MASK])
+#define entry(i) (entries[i & LOG_MASK])
 
 #define SWAP_ENTRY(a, b) do {   \
   struct log_entry tmp;         \
@@ -45,24 +48,24 @@ static void short_sort(struct log_entry entries[], int l, int r) {
   for (pos = r; pos > l; --pos) {
     max = pos;
     for (i = l; i < pos; ++i) {
-      if (comp_entry(&entries(i), &entries(max)) > 0) max = i;
+      if (comp_entry(&entry(i), &entry(max)) > 0) max = i;
     }
-    SWAP_ENTRY(entries(max), entries(pos));
+    SWAP_ENTRY(entry(max), entry(pos));
   }
 }
 
 static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     int mi = (l + r) >> 1;
-    struct log_entry m = entries(mi);
-    entries(mi) = entries(l);
-    entries(l) = m;
+    struct log_entry m = entry(mi);
+    entry(mi) = entry(l);
+    entry(l) = m;
     while (l < r) {
-        while (l < r && comp_entry(&entries(r), &m) >= 0) --r;
-        entries(l) = entries(r);
-        while (l < r && comp_entry(&entries(l), &m) <= 0) ++l;
-        entries(r) = entries(l);
+        while (l < r && comp_entry(&entry(r), &m) >= 0) --r;
+        entry(l) = entry(r);
+        while (l < r && comp_entry(&entry(l), &m) <= 0) ++l;
+        entry(r) = entry(l);
     }
-    entries(l) = m;
+    entry(l) = m;
     return l;
 }
 
@@ -106,6 +109,15 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
             return -EFAULT;
         }
         end = tran->end;
+#ifdef __KERNEL__
+        for (i = tran->begin; i < tran->end; ++i) {
+        	struct rlog *rl = NULL;
+        	struct hlist_node *tmp;
+        	for_each_possible_rlog_safe(page_rlog, rl, tmp, entry(i).data) {
+
+        	}
+        }
+#endif
         list_del(&tran->list);
         MFREE(tran);
         --nr;
@@ -126,7 +138,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         return -EAGAIN;
     }
     for (i = begin; i < end; ++i) {
-        PRINT("(%d)\t%lu\t%lu\n", i, entries(i).inode_id, entries(i).block_begin);
+        PRINT("(%d)\t%lu\t%lu\n", i, entry(i).inode_id, entry(i).block_begin);
     }
 
     log->l_begin = end;

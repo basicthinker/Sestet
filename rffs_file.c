@@ -17,35 +17,18 @@
 #include <asm/errno.h>
 
 #include "log.h"
+#include "rlog.h"
 #include "policy.h"
-#include "hashtable.h"
 #include "rffs.h"
 
-#define RLOG_HASH_BITS 10
 #define MAX_LOG_NUM 20
 
 struct rffs_log rffs_logs[MAX_LOG_NUM];
 static atomic_t logi;
 
-struct rlog {
-	struct page *key;
-	struct hlist_node hnode;
-	unsigned int enti;
-};
-
 static struct kmem_cache *rffs_rlog_cachep;
 
-#define rlog_malloc() \
-	((struct rlog *)kmem_cache_alloc(rffs_rlog_cachep, GFP_KERNEL))
-#define rlog_free(p) (kmem_cache_free(rffs_rlog_cachep, p))
-
-static DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
-
-#define hash_add_rlog(hashtable, rlog) \
-	hlist_add_head(&rlog->hnode, &hashtable[hash_32((u32)rlog->key, RLOG_HASH_BITS)])
-
-#define for_each_possible_rlog(hashtable, obj, key)	\
-	hlist_for_each_entry(obj, &hashtable[hash_32((u32)key, RLOG_HASH_BITS)], hnode)
+DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 
 static inline struct rlog *hash_find_rlog(struct hlist_head hashtable[],
 		struct page *key)
