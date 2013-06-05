@@ -56,7 +56,7 @@ void rffs_exit_hook(void)
 	kmem_cache_destroy(rffs_rlog_cachep);
 }
 
-static inline struct rlog *rffs_try_attach_rlog(struct inode *host,
+static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		struct page* page)
 {
 	struct rlog *rl;
@@ -67,13 +67,24 @@ static inline struct rlog *rffs_try_attach_rlog(struct inode *host,
 
 	rl = hash_find_rlog(page_rlog, page);
 
-	if (!rl || LESS(rl->enti, log->l_head)) { // new page
-		BUG_ON(rl && LESS(rl->enti, log->l_begin));
+	if (rl && LESS(rl->enti, log->l_head)) { // COW
+		struct page *cpage = page_cache_alloc_cold(&host->i_data);
+		void *vfrom, *vto;
+		struct rlog* nrl;
+		vfrom = kmap_atomic(page, KM_USER0);
+		vto = kmap_atomic(cpage, KM_USER1);
+		copy_page(vto, vfrom);
+		kunmap_atomic(vfrom, KM_USER0);
+		kunmap_atomic(vto, KM_USER1);
 
-		if (rl && LESS(rl->enti, log->l_head)) {
-			//TODO COW, rehash rl
-		}
+		nrl = rlog_malloc();
+		nrl->key = cpage;
+		nrl->enti = rl->enti;
+		L_ENT(log, nrl->enti).data = cpage;
+		hash_add_rlog(page_rlog, nrl);
 
+		return rl;
+	} else if (!rl) { // new page
 		rl = rlog_malloc();
 		rl->key = page;
 		hash_add_rlog(page_rlog, rl);
@@ -81,7 +92,7 @@ static inline struct rlog *rffs_try_attach_rlog(struct inode *host,
 	} else return NULL; // no new rlog
 }
 
-static inline int rffs_try_append(struct inode *host, struct rlog* rl,
+static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		unsigned long size)
 {
 	int err = 0;
@@ -175,7 +186,7 @@ again:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
-		if (!re_entry) rl = rffs_try_attach_rlog(mapping->host, page);
+		if (!re_entry) rl = rffs_try_assoc_rlog(mapping->host, page);
 
 		pagefault_disable();
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
@@ -209,7 +220,7 @@ again:
 		pos += copied;
 		written += copied;
 
-		rffs_try_append(mapping->host, rl, copied);
+		rffs_try_append_log(mapping->host, rl, copied);
 
 		//TODO
 		//balance_dirty_pages_ratelimited(mapping);

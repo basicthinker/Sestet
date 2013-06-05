@@ -23,7 +23,7 @@ extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 extern int rffs_init_hook(void);
 extern void rffs_exit_hook(void);
 
-static void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode)
+static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode)
 {
 	if (dir) {
 		new_inode->i_private = dir->i_private;
@@ -34,7 +34,7 @@ static void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode)
 	}
 }
 
-static void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)
+static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)
 {
 	old_inode->i_private = new_dir->i_private;
 #ifdef RFFS_DEBUG

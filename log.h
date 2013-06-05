@@ -62,6 +62,7 @@ struct rffs_log {
 };
 
 #define L_END(log) (atomic_read(&log->l_end))
+#define L_ENT(log, i) (log->l_entries[L_INDEX(i)])
 
 static inline struct transaction *__log_add_tran(struct rffs_log *log)
 {
@@ -141,7 +142,7 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
         }
         spin_unlock(&log->l_lock);
     }
-    log->l_entries[L_INDEX(tail)] = *entry;
+    L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
     return 0;
 }
