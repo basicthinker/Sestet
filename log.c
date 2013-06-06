@@ -8,6 +8,8 @@
 
 #ifdef __KERNEL__
 #include "rlog.h"
+#include <linux/mmdebug.h>
+#include <linux/page-flags.h>
 #endif
 #include "log.h"
 
@@ -91,6 +93,10 @@ int log_sort(struct rffs_log *log, int begin, int end) {
     return 0;
 }
 
+static inline void flush(struct page *page)
+{
+	// TODO
+}
 
 int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int begin, end;
@@ -111,11 +117,16 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         end = tran->end;
 #ifdef __KERNEL__
         for (i = tran->begin; i < tran->end; ++i) {
-        	struct rlog *rl = NULL;
-        	struct hlist_node *tmp;
-        	for_each_possible_rlog_safe(page_rlog, rl, tmp, entry(i).data) {
-
+        	struct rlog *rl = hash_find_rlog(page_rlog, entry(i).data);
+        	hash_del(&rl->hnode);
+        	if (PageError(rl->key)) {
+        		ClearPageError(rl->key);
+        		flush(rl->key);
+        		__free_page(rl->key);
+        	} else {
+        		flush(rl->key);
         	}
+        	rlog_free(rl);
         }
 #endif
         list_del(&tran->list);

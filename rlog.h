@@ -19,6 +19,8 @@ struct rlog {
 	unsigned int enti;
 };
 
+extern struct kmem_cache *rffs_rlog_cachep;
+
 #define rlog_malloc() \
 	((struct rlog *)kmem_cache_alloc(rffs_rlog_cachep, GFP_KERNEL))
 #define rlog_free(p) (kmem_cache_free(rffs_rlog_cachep, p))
@@ -31,6 +33,14 @@ struct rlog {
 
 #define for_each_possible_rlog_safe(hashtable, obj, tmp, key)	\
 	hlist_for_each_entry_safe(obj, tmp, &hashtable[hash_32((u32)key, RLOG_HASH_BITS)], hnode)
+
+#define hash_find_rlog(hashtable, page) ({			\
+	struct rlog *rl;								\
+	for_each_possible_rlog(hashtable, rl, page) {	\
+		if (rl->key == page) break;					\
+	}												\
+	rl;												\
+})
 
 // rffs_file.c
 extern struct hlist_head page_rlog[];

@@ -26,19 +26,9 @@
 struct rffs_log rffs_logs[MAX_LOG_NUM];
 static atomic_t logi;
 
-static struct kmem_cache *rffs_rlog_cachep;
+struct kmem_cache *rffs_rlog_cachep;
 
 DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
-
-static inline struct rlog *hash_find_rlog(struct hlist_head hashtable[],
-		struct page *key)
-{
-	struct rlog *rl;
-	for_each_possible_rlog(hashtable, rl, key) {
-		if (rl->key == key) return rl;
-	}
-	return NULL;
-}
 
 int rffs_init_hook(void)
 {
@@ -66,6 +56,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	BUG_ON(li > MAX_LOG_NUM);
 
 	rl = hash_find_rlog(page_rlog, page);
+	BUG_ON(PageError(page));
 
 	if (rl && LESS(rl->enti, log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
@@ -81,6 +72,8 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		nrl->key = cpage;
 		nrl->enti = rl->enti;
 		L_ENT(log, nrl->enti).data = cpage;
+
+		SetPageError(cpage); // indicates out of page cache
 		hash_add_rlog(page_rlog, nrl);
 
 		return rl;
