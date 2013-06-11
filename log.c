@@ -8,6 +8,7 @@
 
 #ifdef __KERNEL__
 #include "rlog.h"
+#include <linux/highmem.h>
 #include <linux/mmdebug.h>
 #include <linux/page-flags.h>
 #endif
@@ -93,10 +94,17 @@ int log_sort(struct rffs_log *log, int begin, int end) {
     return 0;
 }
 
-static inline void flush(struct page *page)
+#ifdef __KERNEL__
+
+static inline void do_flush(struct page *page)
 {
-	// TODO
+	void *addr;
+	addr = kmap_atomic(page, KM_USER0);
+	printk("[rffs] flushed page %p with %c.\n", addr, *(char *)addr);
+	kunmap_atomic(addr, KM_USER0);
 }
+
+#endif
 
 int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int begin, end;
@@ -121,10 +129,10 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         	hash_del(&rl->hnode);
         	if (PageError(rl->key)) {
         		ClearPageError(rl->key);
-        		flush(rl->key);
+        		do_flush(rl->key);
         		__free_page(rl->key);
         	} else {
-        		flush(rl->key);
+        		do_flush(rl->key);
         	}
         	rlog_free(rl);
         }

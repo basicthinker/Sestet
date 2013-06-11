@@ -50,7 +50,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		struct page* page)
 {
 	struct rlog *rl;
-	unsigned int li = (unsigned int)host->i_private;
+	unsigned int li = (unsigned int)(long)host->i_private;
 	struct rffs_log *log = rffs_logs + li;
 
 	BUG_ON(li > MAX_LOG_NUM);
@@ -89,16 +89,16 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		unsigned long size)
 {
 	int err = 0;
-	int li = (int)host->i_private;
+	unsigned int li = (unsigned int)(long)host->i_private;
 	struct rffs_log *log = rffs_logs + li;
 
 	BUG_ON(li > MAX_LOG_NUM);
 
 	if (!rl) {
 		struct transaction *tran = log_tail_tran(log);
-		on_write_old_page(tran->stat, size);
+		on_write_old_page(log, tran->stat, size);
 #ifdef RFFS_TRACE
-		printk(KERN_INFO "[rffs] for log(%d) old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+		printk(KERN_INFO "[rffs] for log(%u) old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
 #endif
 	} else {
@@ -112,10 +112,10 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		err = log_append(log, &ent, &ei);
 		if (likely(!err)) {
 			struct transaction *tran = log_tail_tran(log);
-			on_write_new_page(tran->stat, size);
+			on_write_new_page(log, tran->stat, size);
 			rl->enti = ei;
 #ifdef RFFS_TRACE
-			printk(KERN_INFO "[rffs] for log(%d) new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+			printk(KERN_INFO "[rffs] for log(%u) new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 					tran->stat.merg_size, tran->stat.latency);
 #endif
 		}

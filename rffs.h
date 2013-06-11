@@ -28,8 +28,8 @@ static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inod
 	if (dir) {
 		new_inode->i_private = dir->i_private;
 #ifdef RFFS_DEBUG
-		printk(KERN_INFO "[rffs] new_inode_hook: %lu->%d to %lu\n",
-				dir->i_ino, (int)dir->i_private, new_inode->i_ino);
+		printk(KERN_INFO "[rffs] new_inode_hook: %lu->%lu to %lu\n",
+				dir->i_ino, (unsigned long)dir->i_private, new_inode->i_ino);
 #endif
 	}
 }
@@ -38,8 +38,8 @@ static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_ino
 {
 	old_inode->i_private = new_dir->i_private;
 #ifdef RFFS_DEBUG
-	printk(KERN_INFO "[rffs] rename_hook: %lu->%d to %lu\n",
-			new_dir->i_ino, (int)new_dir->i_private, old_inode->i_ino);
+	printk(KERN_INFO "[rffs] rename_hook: %lu->%lu to %lu\n",
+			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 #endif
 }
 
