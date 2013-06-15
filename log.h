@@ -10,6 +10,7 @@
 #define RFFS_LOG_H_
 
 #include <linux/types.h>
+#include <linux/kernel.h>
 #include <asm/errno.h>
 
 #include "sys.h"
@@ -27,10 +28,13 @@
 #define LESS(a, b) (a != b && DIST(a, b) <= LOG_LEN)
 
 struct log_entry {
-    unsigned long inode_id;
+    unsigned long inode_id; // ULONG_MAX indicates invalid entry
     unsigned long block_begin;
     void *data;
 };
+
+#define ent_inval(ent) { (ent).inode_id = ULONG_MAX; }
+#define ent_valid(ent) ((ent).inode_id != ULONG_MAX)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
@@ -147,6 +151,14 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     return 0;
 }
 
-extern int log_sort(struct rffs_log *log, int begin, int end);
+extern int __log_sort(struct rffs_log *log, int begin, int end);
+
+static inline int log_sort(struct rffs_log *log, int begin, int end) {
+    int ret;
+    spin_lock(&log->l_lock);
+    ret = __log_sort(log, begin, end);
+    spin_unlock(&log->l_lock);
+    return ret;
+}
 
 #endif

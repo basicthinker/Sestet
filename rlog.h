@@ -26,13 +26,13 @@ extern struct kmem_cache *rffs_rlog_cachep;
 #define rlog_free(p) (kmem_cache_free(rffs_rlog_cachep, p))
 
 #define hash_add_rlog(hashtable, rlog) \
-	hlist_add_head(&rlog->hnode, &hashtable[hash_32((u32)(u64)rlog->key, RLOG_HASH_BITS)])
+	hlist_add_head(&rlog->hnode, &hashtable[hash_32((u32)(long)rlog->key, RLOG_HASH_BITS)])
 
 #define for_each_possible_rlog(hashtable, obj, key)	\
-	hlist_for_each_entry(obj, &hashtable[hash_32((u32)(u64)key, RLOG_HASH_BITS)], hnode)
+	hlist_for_each_entry(obj, &hashtable[hash_32((u32)(long)key, RLOG_HASH_BITS)], hnode)
 
 #define for_each_possible_rlog_safe(hashtable, obj, tmp, key)	\
-	hlist_for_each_entry_safe(obj, tmp, &hashtable[hash_32((u32)(u64)key, RLOG_HASH_BITS)], hnode)
+	hlist_for_each_entry_safe(obj, tmp, &hashtable[hash_32((u32)(long)key, RLOG_HASH_BITS)], hnode)
 
 #define hash_find_rlog(hashtable, page) ({			\
 	struct rlog *rl;								\

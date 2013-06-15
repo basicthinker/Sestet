@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
   }
 
   // merge
-  for (i = 0; i < 6; ++i) {
+  for (i = 0; i < 10; ++i) {
     init_page(page, i + '0');
     fwrite(page, sizeof(page), 1, fp);
     fflush(fp);

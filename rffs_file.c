@@ -98,7 +98,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		struct transaction *tran = log_tail_tran(log);
 		on_write_old_page(log, tran->stat, size);
 #ifdef RFFS_TRACE
-		printk(KERN_INFO "[rffs] for log(%u) old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+		printk(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
 #endif
 	} else {
@@ -115,7 +115,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 			on_write_new_page(log, tran->stat, size);
 			rl->enti = ei;
 #ifdef RFFS_TRACE
-			printk(KERN_INFO "[rffs] for log(%u) new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+			printk(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 					tran->stat.merg_size, tran->stat.latency);
 #endif
 		}

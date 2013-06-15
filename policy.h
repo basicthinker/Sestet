@@ -29,15 +29,19 @@ struct tran_stat {
 #define on_write_old_page(logp, tran_stat, size) {	\
 	tran_stat.merg_size += size;					\
 	tran_stat.staleness += size;					\
+	if (tran_stat.staleness >= 4 * PAGE_SIZE) {		\
+		log_seal(logp);								\
+	}												\
 }
 
 #define on_write_new_page(logp, tran_stat, size) {	\
 	tran_stat.staleness += size;					\
-	tran_stat.latency += 1;							\
-	if (tran_stat.staleness >= 2 * PAGE_SIZE) {				\
+	if (tran_stat.staleness >= 4 * PAGE_SIZE) {		\
 		log_seal(logp);								\
 	}												\
-	if (DIST(logp->l_begin, logp->l_head) >= 2) {	\
+													\
+	tran_stat.latency += 1;							\
+	if (DIST(logp->l_begin, logp->l_head) >= 4) {	\
 		log_flush(logp, 2);							\
 	}												\
 }

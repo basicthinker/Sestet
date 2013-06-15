@@ -17,7 +17,7 @@
 #define CUT_OFF 4
 #define STACK_SIZE 32
 
-#define entry(i) (entries[i & LOG_MASK])
+#define entry(i) (entries[(i) & LOG_MASK])
 
 #define SWAP_ENTRY(a, b) do {   \
   struct log_entry tmp;         \
@@ -72,7 +72,7 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     return l;
 }
 
-int log_sort(struct rffs_log *log, int begin, int end) {
+int __log_sort(struct rffs_log *log, int begin, int end) {
     struct stack_elem elem;
     int p;
     if (begin > end) {
@@ -94,13 +94,22 @@ int log_sort(struct rffs_log *log, int begin, int end) {
     return 0;
 }
 
+static void merge_inval(struct log_entry entries[], int begin, int end) {
+	int i;
+	for (i = begin + 1; i < end; ++i) {
+		if (comp_entry(&entry(i - 1), &entry(i)) == 0) {
+			ent_inval(entry(i - 1));
+		}
+	}
+}
+
 #ifdef __KERNEL__
 
 static inline void do_flush(struct page *page)
 {
 	void *addr;
 	addr = kmap_atomic(page, KM_USER0);
-	printk("[rffs] flushed page %p with %c.\n", addr, *(char *)addr);
+	printk("[rffs] flushing page %p with %c.\n", addr, *(char *)addr);
 	kunmap_atomic(addr, KM_USER0);
 }
 
@@ -123,20 +132,6 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
             return -EFAULT;
         }
         end = tran->end;
-#ifdef __KERNEL__
-        for (i = tran->begin; i < tran->end; ++i) {
-        	struct rlog *rl = hash_find_rlog(page_rlog, entry(i).data);
-        	hash_del(&rl->hnode);
-        	if (PageError(rl->key)) {
-        		ClearPageError(rl->key);
-        		do_flush(rl->key);
-        		__free_page(rl->key);
-        	} else {
-        		do_flush(rl->key);
-        	}
-        	rlog_free(rl);
-        }
-#endif
         list_del(&tran->list);
         MFREE(tran);
         --nr;
@@ -147,7 +142,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
 
     PRINT("(-1)\t%d\n", end - begin);
-    err = log_sort(log, begin, end);
+    err = __log_sort(log, begin, end);
     if (err) {
         PRINT("[Err%d] log_sort() failed.\n", err);
         tran = (struct transaction *)MALLOC(sizeof(struct transaction));
@@ -156,7 +151,20 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         list_add(&tran->list, &log->l_trans);
         return -EAGAIN;
     }
+    merge_inval(entries, begin, end);
     for (i = begin; i < end; ++i) {
+#ifdef __KERNEL__
+    	struct rlog *rl = hash_find_rlog(page_rlog, entry(i).data);
+    	hash_del(&rl->hnode);
+    	if (PageError(rl->key)) {
+    		ClearPageError(rl->key);
+    		if (ent_valid(entry(i))) do_flush(rl->key);
+    		__free_page(rl->key);
+    	} else if (ent_valid(entry(i))) {
+    		do_flush(rl->key);
+    	}
+    	rlog_free(rl);
+#endif
         PRINT("(%d)\t%lu\t%lu\n", i, entry(i).inode_id, entry(i).block_begin);
     }
 
