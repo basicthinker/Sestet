@@ -920,7 +920,7 @@ static void init_once(void *foo)
 
 static int init_inodecache(void)
 {
-	ext4_inode_cachep = kmem_cache_create("ext4_inode_cache",
+	ext4_inode_cachep = kmem_cache_create("rffs_inode_cache",
 					     sizeof(struct ext4_inode_info),
 					     0, (SLAB_RECLAIM_ACCOUNT|
 						SLAB_MEM_SPREAD),
@@ -2883,7 +2883,7 @@ static void ext4_clear_request_list(void)
 static int ext4_run_lazyinit_thread(void)
 {
 	ext4_lazyinit_task = kthread_run(ext4_lazyinit_thread,
-					 ext4_li_info, "ext4lazyinit");
+					 ext4_li_info, "rffslazyinit");
 	if (IS_ERR(ext4_lazyinit_task)) {
 		int err = PTR_ERR(ext4_lazyinit_task);
 		ext4_clear_request_list();
@@ -3593,7 +3593,7 @@ no_journal:
 	 * concurrency isn't really necessary.  Limit it to 1.
 	 */
 	EXT4_SB(sb)->dio_unwritten_wq =
-		alloc_workqueue("ext4-dio-unwritten", WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
+		alloc_workqueue("rffs-dio-unwritten", WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
 	if (!EXT4_SB(sb)->dio_unwritten_wq) {
 		printk(KERN_ERR "EXT4-fs: failed to create DIO workqueue\n");
 		goto failed_mount_wq;
@@ -4901,7 +4901,7 @@ static inline int ext3_feature_set_ok(struct super_block *sb) { return 0; }
 
 static struct file_system_type ext4_fs_type = {
 	.owner		= THIS_MODULE,
-	.name		= "ext4",
+	.name		= "rffs",
 	.mount		= ext4_mount,
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,
@@ -4959,10 +4959,10 @@ static int __init ext4_init_fs(void)
 	err = ext4_init_system_zone();
 	if (err)
 		goto out7;
-	ext4_kset = kset_create_and_add("ext4", NULL, fs_kobj);
+	ext4_kset = kset_create_and_add("rffs", NULL, fs_kobj);
 	if (!ext4_kset)
 		goto out6;
-	ext4_proc_root = proc_mkdir("fs/ext4", NULL);
+	ext4_proc_root = proc_mkdir("fs/rffs", NULL);
 	if (!ext4_proc_root)
 		goto out5;
 
@@ -5000,7 +5000,7 @@ out2:
 out3:
 	ext4_exit_feat_adverts();
 out4:
-	remove_proc_entry("fs/ext4", NULL);
+	remove_proc_entry("fs/rffs", NULL);
 out5:
 	kset_unregister(ext4_kset);
 out6:
@@ -5020,7 +5020,7 @@ static void __exit ext4_exit_fs(void)
 	ext4_exit_xattr();
 	ext4_exit_mballoc();
 	ext4_exit_feat_adverts();
-	remove_proc_entry("fs/ext4", NULL);
+	remove_proc_entry("fs/rffs", NULL);
 	kset_unregister(ext4_kset);
 	ext4_exit_system_zone();
 	ext4_exit_pageio();
