@@ -48,7 +48,7 @@
 #include "acl.h"
 #include "ext4_extents.h"
 
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 #define MPAGE_DA_EXTENT_TAIL 0x01
 

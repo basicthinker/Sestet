@@ -51,7 +51,7 @@
 #include "mballoc.h"
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 static struct proc_dir_entry *ext4_proc_root;
 static struct kset *ext4_kset;

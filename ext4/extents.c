@@ -44,7 +44,7 @@
 #include "ext4_jbd2.h"
 #include "ext4_extents.h"
 
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 #define EXT4_EXT_DATA_VALID1	0x8  /* first half contains valid data */
 #define EXT4_EXT_DATA_VALID2	0x10 /* second half contains valid data */

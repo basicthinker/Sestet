@@ -4,7 +4,7 @@
 
 #include "ext4_jbd2.h"
 
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 int __ext4_journal_get_write_access(const char *where, unsigned int line,
 				    handle_t *handle, struct buffer_head *bh)

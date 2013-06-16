@@ -21,7 +21,7 @@
 #include "ext4_jbd2.h"
 #include "mballoc.h"
 
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 /*
  * balloc.c contains the blocks allocation and deallocation routines

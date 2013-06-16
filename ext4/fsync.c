@@ -32,7 +32,7 @@
 #include "ext4.h"
 #include "ext4_jbd2.h"
 
-#include <trace/events/ext4.h>
+#include "trace-events-ext4.h"
 
 static void dump_completed_IO(struct inode * inode)
 {
