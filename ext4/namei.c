@@ -40,6 +40,7 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include "rffs.h"
 #include "trace-events-ext4.h"
 /*
  * define how far ahead to read directories while searching them.
@@ -2435,6 +2436,8 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 	retval = -ENOENT;
 	if (!old_bh || le32_to_cpu(old_de->inode) != old_inode->i_ino)
 		goto end_rename;
+
+	rffs_rename_hook(new_dir, old_inode);
 
 	new_inode = new_dentry->d_inode;
 	new_bh = ext4_find_entry(new_dir, &new_dentry->d_name, &new_de);

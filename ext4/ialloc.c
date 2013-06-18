@@ -29,6 +29,7 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include "rffs.h"
 #include "trace-events-ext4.h"
 
 /*
@@ -832,6 +833,8 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, int mode,
 		return ERR_PTR(-ENOMEM);
 	ei = EXT4_I(inode);
 	sbi = EXT4_SB(sb);
+
+	rffs_new_inode_hook(dir, inode);
 
 	if (!goal)
 		goal = sbi->s_inode_goal;

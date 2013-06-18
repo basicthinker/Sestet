@@ -29,6 +29,8 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include "rffs.h"
+
 /*
  * Called when an inode is released. Note that this is different
  * from ext4_file_open: open gets called at every open, but release
@@ -133,7 +135,7 @@ ext4_file_write(struct kiocb *iocb, const struct iovec *iov,
 		ext4_aiodio_wait(inode);
 	}
 
-	ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
+	ret = rffs_file_aio_write(iocb, iov, nr_segs, pos);
 
 	if (unaligned_aio)
 		mutex_unlock(ext4_aio_mutex(inode));

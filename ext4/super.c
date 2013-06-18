@@ -50,6 +50,8 @@
 #include "acl.h"
 #include "mballoc.h"
 
+#include "rffs.h"
+
 #define CREATE_TRACE_POINTS
 #include "trace-events-ext4.h"
 
@@ -4946,6 +4948,10 @@ static int __init ext4_init_fs(void)
 {
 	int i, err;
 
+	err = rffs_init_hook();
+	if (err)
+		return err;
+
 	ext4_check_flag_values();
 
 	for (i = 0; i < EXT4_WQ_HASH_SZ; i++) {
@@ -5012,6 +5018,7 @@ out7:
 
 static void __exit ext4_exit_fs(void)
 {
+	rffs_exit_hook();
 	ext4_destroy_lazyinit_thread();
 	unregister_as_ext2();
 	unregister_as_ext3();
