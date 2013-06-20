@@ -70,12 +70,12 @@ static inline int ext4_begin_ordered_truncate(struct inode *inode,
 }
 
 static void ext4_invalidatepage(struct page *page, unsigned long offset);
-static int noalloc_get_block_write(struct inode *inode, sector_t iblock,
+int noalloc_get_block_write(struct inode *inode, sector_t iblock,
 				   struct buffer_head *bh_result, int create);
 static int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
 static void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
 static int __ext4_journalled_writepage(struct page *page, unsigned int len);
-static int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh);
+int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh);
 
 /*
  * Test whether an inode is a fast symlink.
@@ -1521,7 +1521,7 @@ struct buffer_head *ext4_bread(handle_t *handle, struct inode *inode,
 	return NULL;
 }
 
-static int walk_page_buffers(handle_t *handle,
+int walk_page_buffers(handle_t *handle,
 			     struct buffer_head *head,
 			     unsigned from,
 			     unsigned to,
@@ -1577,7 +1577,7 @@ static int walk_page_buffers(handle_t *handle,
  * is elevated.  We'll still have enough credits for the tiny quotafile
  * write.
  */
-static int do_journal_get_write_access(handle_t *handle,
+int do_journal_get_write_access(handle_t *handle,
 				       struct buffer_head *bh)
 {
 	int dirty = buffer_dirty(bh);
@@ -1699,7 +1699,7 @@ out:
 }
 
 /* For write_end() in data=journal mode */
-static int write_end_fn(handle_t *handle, struct buffer_head *bh)
+int write_end_fn(handle_t *handle, struct buffer_head *bh)
 {
 	if (!buffer_mapped(bh) || buffer_freed(bh))
 		return 0;
@@ -2457,7 +2457,7 @@ flush_it:
 	return;
 }
 
-static int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh)
+int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh)
 {
 	return (buffer_delay(bh) || buffer_unwritten(bh)) && buffer_dirty(bh);
 }
@@ -2545,20 +2545,20 @@ static int ext4_da_get_block_prep(struct inode *inode, sector_t iblock,
  * b_blocknr could be left unitialized, and the page write functions will
  * be taken by surprise.
  */
-static int noalloc_get_block_write(struct inode *inode, sector_t iblock,
+int noalloc_get_block_write(struct inode *inode, sector_t iblock,
 				   struct buffer_head *bh_result, int create)
 {
 	BUG_ON(bh_result->b_size != inode->i_sb->s_blocksize);
 	return _ext4_get_block(inode, iblock, bh_result, 0);
 }
 
-static int bget_one(handle_t *handle, struct buffer_head *bh)
+int bget_one(handle_t *handle, struct buffer_head *bh)
 {
 	get_bh(bh);
 	return 0;
 }
 
-static int bput_one(handle_t *handle, struct buffer_head *bh)
+int bput_one(handle_t *handle, struct buffer_head *bh)
 {
 	put_bh(bh);
 	return 0;
