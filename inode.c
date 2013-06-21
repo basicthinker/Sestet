@@ -277,7 +277,7 @@ static struct file_system_type ramfs_fs_type = {
 
 static int __init init_ramfs_fs(void)
 {
-	int err = rffs_init_hook();
+	int err = rffs_init_hook(NULL);
 	if (err) return err;
 	return register_filesystem(&ramfs_fs_type);
 }

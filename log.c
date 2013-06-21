@@ -103,9 +103,16 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	}
 }
 
+struct flush_operations flush_ops;
+
+static inline int do_trans_begin(handle_t *handle) {
+	if (flush_ops.trans_begin) return flush_ops.trans_begin(handle);
+	else return 0;
+}
+
 #ifdef __KERNEL__
 
-static inline void do_flush(struct page *page)
+static inline void flush_page(handle_t *handle, struct page *page)
 {
 	void *addr;
 	addr = kmap_atomic(page, KM_USER0);
@@ -115,12 +122,38 @@ static inline void do_flush(struct page *page)
 
 #endif
 
+static inline int do_flush(handle_t *handle, struct log_entry *ent)
+{
+	if (unlikely(!flush_ops.ent_flush)) {
+#ifdef __KERNEL__
+		struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
+		hash_del(&rl->hnode);
+		if (PageError(rl->key)) {
+			ClearPageError(rl->key);
+			if (ent_valid(*ent)) flush_page(handle, rl->key);
+			__free_page(rl->key);
+		} else if (ent_valid(*ent)) {
+			flush_page(handle, rl->key);
+		}
+		rlog_free(rl);
+#endif
+		PRINT("[rffs] flushing ent data %p.\n", ent->data);
+		return 0;
+	} else return flush_ops.ent_flush(handle, ent);
+}
+
+static inline int do_trans_end(handle_t *handle) {
+	if (flush_ops.trans_end) return flush_ops.trans_end(handle);
+	else return 0;
+}
+
 int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int begin, end;
     unsigned int i;
-    int err;
+    int err = 0;
     struct log_entry *entries = log->l_entries;
     struct transaction *tran;
+    handle_t handle;
 
     begin = end = log->l_begin;
     while (nr) {
@@ -141,7 +174,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     	return -ENODATA;
     }
 
-    PRINT("(-1)\t%d\n", end - begin);
+    PRINT("[rffs]\t(-1)\t%d\n", end - begin);
     err = __log_sort(log, begin, end);
     if (err) {
         PRINT("[Err%d] log_sort() failed.\n", err);
@@ -152,23 +185,20 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         return -EAGAIN;
     }
     merge_inval(entries, begin, end);
+    err = do_trans_begin(&handle);
+    if (unlikely(err)) return err;
     for (i = begin; i < end; ++i) {
-#ifdef __KERNEL__
-    	struct rlog *rl = hash_find_rlog(page_rlog, entry(i).data);
-    	hash_del(&rl->hnode);
-    	if (PageError(rl->key)) {
-    		ClearPageError(rl->key);
-    		if (ent_valid(entry(i))) do_flush(rl->key);
-    		__free_page(rl->key);
-    	} else if (ent_valid(entry(i))) {
-    		do_flush(rl->key);
+    	err = do_flush(&handle, &entry(i));
+    	if (unlikely(err)) {
+    		log->l_begin = i;
+    		break;
+    	} else {
+    		PRINT("[rffs]\t(%d)\t%lu\t%lu\n",
+    				i, entry(i).inode_id, entry(i).block_begin);
     	}
-    	rlog_free(rl);
-#endif
-        PRINT("(%d)\t%lu\t%lu\n", i, entry(i).inode_id, entry(i).block_begin);
     }
-
+    err = do_trans_end(&handle);
     log->l_begin = end;
 
-    return 0;
+    return err;
 }

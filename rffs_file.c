@@ -30,7 +30,7 @@ struct kmem_cache *rffs_rlog_cachep;
 
 DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 
-int rffs_init_hook(void)
+int rffs_init_hook(struct flush_operations *fops)
 {
 	atomic_set(&logi, 0);
 	log_init(&rffs_logs[0]);
@@ -38,6 +38,9 @@ int rffs_init_hook(void)
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	if (!rffs_rlog_cachep)
 		return -ENOMEM;
+	if (!fops) {
+		flush_ops.ent_flush = flush_ops.trans_begin = flush_ops.trans_end = NULL;
+	} else flush_ops = *fops;
 	return 0;
 }
 

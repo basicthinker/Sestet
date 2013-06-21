@@ -13,6 +13,12 @@
 #include <linux/kernel.h>
 #include <asm/errno.h>
 
+#ifdef __KERNEL__
+#include <linux/jbd2.h>
+#else
+typedef int handle_t;
+#endif
+
 #include "sys.h"
 #include "policy.h"
 
@@ -160,5 +166,13 @@ static inline int log_sort(struct rffs_log *log, int begin, int end) {
     spin_unlock(&log->l_lock);
     return ret;
 }
+
+struct flush_operations {
+	int (*trans_begin)(handle_t *handle);
+	int (*ent_flush)(handle_t *handle, struct log_entry *ent);
+	int (*trans_end)(handle_t *handle);
+};
+
+extern struct flush_operations flush_ops;
 
 #endif
