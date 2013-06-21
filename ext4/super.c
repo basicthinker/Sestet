@@ -51,6 +51,7 @@
 #include "mballoc.h"
 
 #include "rffs.h"
+#include "ext4-rffs.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace-events-ext4.h"
@@ -4948,7 +4949,7 @@ static int __init ext4_init_fs(void)
 {
 	int i, err;
 
-	err = rffs_init_hook();
+	err = rffs_init_hook(&rffs_fops);
 	if (err)
 		return err;
 

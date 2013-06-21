@@ -37,8 +37,7 @@ static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 }
 
 //inode.c
-int rffs_writepage(handle_t *handle, struct page *page,
-			  struct writeback_control *wbc)
+static int rffs_writepage(handle_t *handle, struct page *page)
 {
 	int commit_write = 0;
 	loff_t size;
@@ -61,8 +60,6 @@ int rffs_writepage(handle_t *handle, struct page *page,
 	if (!page_has_buffers(page)) {
 		if (__block_write_begin(page, 0, len,
 					noalloc_get_block_write)) {
-		redirty_page:
-			redirty_page_for_writepage(wbc, page);
 			unlock_page(page);
 			return 0;
 		}
@@ -77,7 +74,8 @@ int rffs_writepage(handle_t *handle, struct page *page,
 		 * a journal commit via journal_submit_inode_data_buffers.
 		 * We can also reach here via shrink_page_list
 		 */
-		goto redirty_page;
+		unlock_page(page);
+		return 0;
 	}
 	if (commit_write)
 		/* now mark the buffer_heads as dirty and uptodate */
@@ -85,3 +83,23 @@ int rffs_writepage(handle_t *handle, struct page *page,
 
 	return __rffs_journalled_writepage(handle, page, len);
 }
+
+static handle_t *rffs_trans_begin(int npages, void *data) {
+	struct inode *inode = (struct inode *)data;
+	int nblocks = npages * jbd2_journal_blocks_per_page(inode);
+	return ext4_journal_start_sb(inode->i_sb, nblocks);
+}
+
+static int rffs_ent_flush(handle_t *handle, void *data) {
+	rffs_writepage(handle, (struct page *)data);
+}
+
+static int rffs_trans_end(handle_t *handle) {
+	return ext4_journal_stop(handle);
+}
+
+const struct flush_operations rffs_fops = {
+	.trans_begin = rffs_trans_begin,
+	.ent_flush = rffs_ent_flush,
+	.trans_end = rffs_trans_end,
+};

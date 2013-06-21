@@ -8,6 +8,7 @@
 
 #ifdef __KERNEL__
 #include "rlog.h"
+#include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/mmdebug.h>
 #include <linux/page-flags.h>
@@ -103,43 +104,46 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	}
 }
 
-struct flush_operations flush_ops;
+struct flush_operations flush_ops = { NULL, NULL, NULL };
 
-static inline int do_trans_begin(handle_t *handle) {
-	if (flush_ops.trans_begin) return flush_ops.trans_begin(handle);
-	else return 0;
+static inline handle_t *do_trans_begin(int nent, void *arg) {
+	if (flush_ops.trans_begin)
+		return flush_ops.trans_begin(nent, arg);
+	else return NULL;
 }
 
 #ifdef __KERNEL__
 
 static inline void flush_page(handle_t *handle, struct page *page)
 {
-	void *addr;
-	addr = kmap_atomic(page, KM_USER0);
-	printk("[rffs] flushing page %p with %c.\n", addr, *(char *)addr);
-	kunmap_atomic(addr, KM_USER0);
+	if (flush_ops.ent_flush)
+		flush_ops.ent_flush(handle, page);
+	else {
+		void *addr = kmap_atomic(page, KM_USER0);
+		printk("[rffs] flushing page %p with %c.\n", addr, *(char *)addr);
+		kunmap_atomic(addr, KM_USER0);
+	}
 }
 
 #endif
 
 static inline int do_flush(handle_t *handle, struct log_entry *ent)
 {
-	if (unlikely(!flush_ops.ent_flush)) {
 #ifdef __KERNEL__
-		struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
-		hash_del(&rl->hnode);
-		if (PageError(rl->key)) {
-			ClearPageError(rl->key);
-			if (ent_valid(*ent)) flush_page(handle, rl->key);
-			__free_page(rl->key);
-		} else if (ent_valid(*ent)) {
-			flush_page(handle, rl->key);
-		}
-		rlog_free(rl);
+	struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
+	hash_del(&rl->hnode);
+	if (PageError(rl->key)) {
+		ClearPageError(rl->key);
+		if (ent_valid(*ent)) flush_page(handle, rl->key);
+		__free_page(rl->key);
+	} else if (ent_valid(*ent)) {
+		flush_page(handle, rl->key);
+	}
+	rlog_free(rl);
+	return 0;
 #endif
-		PRINT("[rffs] flushing ent data %p.\n", ent->data);
-		return 0;
-	} else return flush_ops.ent_flush(handle, ent);
+	PRINT("[rffs] flushing ent data %p.\n", ent->data);
+	return 0;
 }
 
 static inline int do_trans_end(handle_t *handle) {
@@ -153,7 +157,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     int err = 0;
     struct log_entry *entries = log->l_entries;
     struct transaction *tran;
-    handle_t handle;
+    handle_t *handle;
 
     begin = end = log->l_begin;
     while (nr) {
@@ -185,10 +189,15 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         return -EAGAIN;
     }
     merge_inval(entries, begin, end);
-    err = do_trans_begin(&handle);
-    if (unlikely(err)) return err;
+#ifdef __KERNEL__
+    while (!ent_valid(entry(begin))) ++begin;
+    handle = do_trans_begin(end - begin,
+    		((struct page *)entry(begin).data)->mapping->host);
+#else
+    handle = do_trans_begin(end - begin, NULL);
+#endif
     for (i = begin; i < end; ++i) {
-    	err = do_flush(&handle, &entry(i));
+    	err = do_flush(handle, &entry(i));
     	if (unlikely(err)) {
     		log->l_begin = i;
     		break;
@@ -197,7 +206,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     				i, entry(i).inode_id, entry(i).block_begin);
     	}
     }
-    err = do_trans_end(&handle);
+    err = do_trans_end(handle);
     log->l_begin = end;
 
     return err;

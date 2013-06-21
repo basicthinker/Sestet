@@ -9,8 +9,13 @@
 #ifndef RFFS_EXT4_RFFS_H_
 #define RFFS_EXT4_RFFS_H_
 
+#include <linux/fs.h>
 #include <linux/jbd2.h>
 #include <linux/buffer_head.h>
+
+#include "log.h"
+
+extern const struct flush_operations rffs_fops;
 
 extern int walk_page_buffers(handle_t *handle,
                              struct buffer_head *head,
