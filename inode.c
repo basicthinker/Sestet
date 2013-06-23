@@ -39,7 +39,9 @@
 #include <asm/uaccess.h>
 #include "internal.h"
 
+#include <linux/jbd2.h>
 #include "rffs.h"
+#include "log.h"
 
 #define RAMFS_DEFAULT_MODE	0755
 
@@ -275,9 +277,22 @@ static struct file_system_type ramfs_fs_type = {
 	.kill_sb	= ramfs_kill_sb,
 };
 
+static inline void ent_flush(handle_t *handle, struct log_entry *ent)
+{
+	struct page *page = (struct page *)ent->data;
+	void *addr = kmap_atomic(page, KM_USER0);
+	printk("[rffs] flushing page %p with %c of length %lu.\n",
+			addr, *(char *)addr, ent->len);
+	kunmap_atomic(addr, KM_USER0);
+}
+
+static struct flush_operations rffs_fops = {
+	.ent_flush = ent_flush,
+};
+
 static int __init init_ramfs_fs(void)
 {
-	int err = rffs_init_hook(NULL);
+	int err = rffs_init_hook(&rffs_fops);
 	if (err) return err;
 	return register_filesystem(&ramfs_fs_type);
 }

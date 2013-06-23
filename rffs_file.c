@@ -57,7 +57,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	BUG_ON(li > MAX_LOG_NUM);
 
 	rl = hash_find_rlog(page_rlog, page);
-	BUG_ON(PageError(page));
+	BUG_ON(PageChecked(page));
 
 	if (rl && LESS(rl->enti, log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
@@ -68,13 +68,14 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		copy_page(vto, vfrom);
 		kunmap_atomic(vfrom, KM_USER0);
 		kunmap_atomic(vto, KM_USER1);
+		cpage->mapping = page->mapping; // for retrieval of inode later on
 
 		nrl = rlog_malloc();
 		nrl->key = cpage;
 		nrl->enti = rl->enti;
 		L_ENT(log, nrl->enti).data = cpage;
 
-		SetPageError(cpage); // indicates out of page cache
+		SetPageChecked(cpage); // indicates out of page cache
 		hash_add_rlog(page_rlog, nrl);
 
 		return rl;
@@ -87,7 +88,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 }
 
 static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
-		unsigned long size)
+		unsigned long offset, unsigned long copied)
 {
 	int err = 0;
 	unsigned int li = (unsigned int)(long)host->i_private;
@@ -97,7 +98,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 	if (!rl) {
 		struct transaction *tran = log_tail_tran(log);
-		on_write_old_page(log, tran->stat, size);
+		on_write_old_page(log, tran->stat, copied);
 #ifdef RFFS_TRACE
 		printk(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
@@ -107,13 +108,14 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		struct log_entry ent;
 
 		ent.inode_id = host->i_ino;
-		ent.block_begin = ((struct page *)rl->key)->index;
+		ent.index = ((struct page *)rl->key)->index;
+		ent.len = offset + copied;
 		ent.data = rl->key;
 
 		err = log_append(log, &ent, &ei);
 		if (likely(!err)) {
 			struct transaction *tran = log_tail_tran(log);
-			on_write_new_page(log, tran->stat, size);
+			on_write_new_page(log, tran->stat, copied);
 			rl->enti = ei;
 #ifdef RFFS_TRACE
 			printk(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
@@ -214,7 +216,7 @@ again:
 		pos += copied;
 		written += copied;
 
-		rffs_try_append_log(mapping->host, rl, copied);
+		rffs_try_append_log(mapping->host, rl, offset, copied);
 
 		//TODO
 		//balance_dirty_pages_ratelimited(mapping);

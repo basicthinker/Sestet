@@ -35,7 +35,8 @@ typedef int handle_t;
 
 struct log_entry {
     unsigned long inode_id; // ULONG_MAX indicates invalid entry
-    unsigned long block_begin;
+    unsigned long index;
+    unsigned long len;
     void *data;
 };
 
@@ -44,7 +45,7 @@ struct log_entry {
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
-	else if (a->inode_id == b->inode_id) return a->block_begin - b->block_begin;
+	else if (a->inode_id == b->inode_id) return a->index - b->index;
 	else return 1;
 }
 
@@ -145,7 +146,7 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
             }
             if (err) {
                 PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",
-                        err, entry->inode_id, entry->block_begin);
+                        err, entry->inode_id, entry->index);
                 spin_unlock(&log->l_lock);
                 return err;
             }
@@ -169,7 +170,7 @@ static inline int log_sort(struct rffs_log *log, int begin, int end) {
 
 struct flush_operations {
 	handle_t *(*trans_begin)(int nent, void *arg);
-	int (*ent_flush)(handle_t *handle, void *data);
+	int (*ent_flush)(handle_t *handle, struct log_entry *ent);
 	int (*trans_end)(handle_t *handle);
 };
 

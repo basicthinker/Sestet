@@ -19,7 +19,7 @@ int main(int argc, const char *argv[]) {
     // Two-round appending
     for (i = 0, err = 0; i < (LOG_LEN * 2) && !err; ++i) {
     	entry.inode_id = rand() & 255;
-    	entry.block_begin = rand() & 255;
+    	entry.index = rand() & 255;
     	err = log_append(&log, &entry, NULL);
     }
     log_seal(&log);
@@ -33,7 +33,7 @@ int main(int argc, const char *argv[]) {
     	PRINT("(-2)\t%d\n", len);
     	for (j = 0, err = 0; j < len && !err; ++j) {
     		entry.inode_id = rand() & 1023;
-    		entry.block_begin = rand() & 1023;
+    		entry.index = rand() & 1023;
     		err = log_append(&log, &entry, NULL);
     	}
     	log_seal(&log);

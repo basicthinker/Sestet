@@ -9,8 +9,7 @@
 #ifdef __KERNEL__
 #include "rlog.h"
 #include <linux/fs.h>
-#include <linux/highmem.h>
-#include <linux/mmdebug.h>
+#include <linux/gfp.h>
 #include <linux/page-flags.h>
 #endif
 #include "log.h"
@@ -100,6 +99,8 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	for (i = begin + 1; i < end; ++i) {
 		if (comp_entry(&entry(i - 1), &entry(i)) == 0) {
 			ent_inval(entry(i - 1));
+			if (entry(i).len < entry(i - 1).len)
+				entry(i).len = entry(i - 1).len;
 		}
 	}
 }
@@ -112,32 +113,14 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
-#ifdef __KERNEL__
-
-static inline void flush_page(handle_t *handle, struct page *page)
-{
-	if (flush_ops.ent_flush)
-		flush_ops.ent_flush(handle, page);
-	else {
-		void *addr = kmap_atomic(page, KM_USER0);
-		printk("[rffs] flushing page %p with %c.\n", addr, *(char *)addr);
-		kunmap_atomic(addr, KM_USER0);
-	}
-}
-
-#endif
-
 static inline int do_flush(handle_t *handle, struct log_entry *ent)
 {
 #ifdef __KERNEL__
 	struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
 	hash_del(&rl->hnode);
-	if (PageError(rl->key)) {
-		ClearPageError(rl->key);
-		if (ent_valid(*ent)) flush_page(handle, rl->key);
+	if (ent_valid(*ent)) flush_ops.ent_flush(handle, ent);
+	if (PageChecked(rl->key)) {
 		__free_page(rl->key);
-	} else if (ent_valid(*ent)) {
-		flush_page(handle, rl->key);
 	}
 	rlog_free(rl);
 	return 0;
@@ -200,10 +183,11 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     	err = do_flush(handle, &entry(i));
     	if (unlikely(err)) {
     		log->l_begin = i;
+    		PRINT("[rffs] __log_flush stops at %d (%d - %d)\n", i, begin, end);
     		break;
     	} else {
-    		PRINT("[rffs]\t(%d)\t%lu\t%lu\n",
-    				i, entry(i).inode_id, entry(i).block_begin);
+    		PRINT("[rffs]\t(%d)\t%lu\t%lu\t%lu\n",
+    				i, entry(i).inode_id, entry(i).index, entry(i).len);
     	}
     }
     err = do_trans_end(handle);

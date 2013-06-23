@@ -7,13 +7,13 @@
 static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 				       unsigned int len)
 {
-	struct address_space *mapping = page->mapping;
-	struct inode *inode = mapping->host;
+	//struct address_space *mapping = page->mapping;
+	//struct inode *inode = mapping->host;
 	struct buffer_head *page_bufs;
 	int ret = 0;
 	int err;
 
-	ClearPageChecked(page);
+	//ClearPageChecked(page); // done by rffs
 	page_bufs = page_buffers(page);
 	BUG_ON(!page_bufs);
 	walk_page_buffers(handle, page_bufs, 0, len, NULL, bget_one);
@@ -32,25 +32,27 @@ static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 		ret = err;
 
 	walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
-	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
+	//ext4_set_inode_state(inode, EXT4_STATE_JDATA); // moved to rffs_writepage()
 	return ret;
 }
 
 //inode.c
-static int rffs_writepage(handle_t *handle, struct page *page)
+static int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
 {
 	int commit_write = 0;
-	loff_t size;
-	unsigned int len;
+	//loff_t size;
+	//unsigned int len;
 	struct buffer_head *page_bufs = NULL;
 	struct inode *inode = page->mapping->host;
 
 	//trace_ext4_writepage(page);
-	size = i_size_read(inode);
-	if (page->index == size >> PAGE_CACHE_SHIFT)
-		len = size & ~PAGE_CACHE_MASK;
-	else
-		len = PAGE_CACHE_SIZE;
+	__lock_page(page);
+
+	//size = i_size_read(inode);
+	//if (page->index == size >> PAGE_CACHE_SHIFT)
+	//	len = size & ~PAGE_CACHE_MASK;
+	//else
+	//	len = PAGE_CACHE_SIZE;
 
 	/*
 	 * If the page does not have buffers (for whatever reason),
@@ -81,6 +83,8 @@ static int rffs_writepage(handle_t *handle, struct page *page)
 		/* now mark the buffer_heads as dirty and uptodate */
 		block_commit_write(page, 0, len);
 
+	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
+	if (PageChecked(page)) page->mapping = NULL; // prevents further dirty operation
 	return __rffs_journalled_writepage(handle, page, len);
 }
 
@@ -90,8 +94,8 @@ static handle_t *rffs_trans_begin(int npages, void *data) {
 	return ext4_journal_start_sb(inode->i_sb, nblocks);
 }
 
-static int rffs_ent_flush(handle_t *handle, void *data) {
-	rffs_writepage(handle, (struct page *)data);
+static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
+	return rffs_writepage(handle, (struct page *)ent->data, ent->len);
 }
 
 static int rffs_trans_end(handle_t *handle) {
