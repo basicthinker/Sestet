@@ -36,6 +36,45 @@ static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 	return ret;
 }
 
+//fs/buffer.c
+
+static int rffs_block_commit_write(struct inode *inode, struct page *page,
+		unsigned from, unsigned to)
+{
+	unsigned block_start, block_end;
+	int partial = 0;
+	unsigned blocksize;
+	struct buffer_head *bh, *head;
+
+	blocksize = 1 << inode->i_blkbits;
+
+	for(bh = head = page_buffers(page), block_start = 0;
+	    bh != head || !block_start;
+	    block_start=block_end, bh = bh->b_this_page) {
+		block_end = block_start + blocksize;
+		if (block_end <= from || block_start >= to) {
+			if (!buffer_uptodate(bh))
+				partial = 1;
+		} else {
+			set_buffer_uptodate(bh);
+			mark_buffer_dirty(bh);
+		}
+		clear_buffer_new(bh);
+	}
+
+	/*
+	 * If this is a partial write which happened to make all buffers
+	 * uptodate then we can optimize away a bogus readpage() for
+	 * the next read(). Here we 'discover' whether the page went
+	 * uptodate as a result of this (potentially partial) write.
+	 */
+	if (!partial)
+		SetPageUptodate(page);
+	return 0;
+}
+
+
+
 //inode.c
 static int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
 {
@@ -79,12 +118,13 @@ static int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
 		unlock_page(page);
 		return 0;
 	}
-	if (commit_write)
+	if (commit_write) {
+		if (PageChecked(page)) page->mapping = NULL; // prevents further dirty operation
 		/* now mark the buffer_heads as dirty and uptodate */
-		block_commit_write(page, 0, len);
+		rffs_block_commit_write(inode, page, 0, len);
+	}
 
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
-	if (PageChecked(page)) page->mapping = NULL; // prevents further dirty operation
 	return __rffs_journalled_writepage(handle, page, len);
 }
 
