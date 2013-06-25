@@ -4,7 +4,7 @@
 #include "ext4-rffs.h"
 
 //inode.c
-static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
+static inline int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 				       unsigned int len)
 {
 	//struct address_space *mapping = page->mapping;
@@ -37,8 +37,7 @@ static int __rffs_journalled_writepage(handle_t *handle, struct page *page,
 }
 
 //fs/buffer.c
-
-static int rffs_block_commit_write(struct inode *inode, struct page *page,
+static inline int rffs_block_commit_write(struct inode *inode, struct page *page,
 		unsigned from, unsigned to)
 {
 	unsigned block_start, block_end;
@@ -73,10 +72,8 @@ static int rffs_block_commit_write(struct inode *inode, struct page *page,
 	return 0;
 }
 
-
-
 //inode.c
-static int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
+static inline int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
 {
 	int commit_write = 0;
 	//loff_t size;

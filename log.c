@@ -120,6 +120,7 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 	hash_del(&rl->hnode);
 	if (ent_valid(*ent)) flush_ops.ent_flush(handle, ent);
 	if (PageChecked(rl->key)) {
+		rl->key->mapping = NULL;
 		__free_page(rl->key);
 	}
 	rlog_free(rl);
