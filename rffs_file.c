@@ -55,11 +55,18 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	struct rffs_log *log = rffs_logs + li;
 
 	BUG_ON(li > MAX_LOG_NUM);
-
-	rl = hash_find_rlog(page_rlog, page);
 	BUG_ON(PageChecked(page));
 
-	if (rl && LESS(rl->enti, log->l_head)) { // COW
+	rl = hash_find_rlog(page_rlog, page);
+
+	if (!rl) { // new page
+                rl = rlog_malloc();
+                rl->key = page;
+                hash_add_rlog(page_rlog, rl);
+                return rl;
+	} else if (rl->enti == LOG_LEN) {
+		return rl;
+	} else if (LESS(rl->enti, log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
 		void *vfrom, *vto;
 		struct rlog* nrl;
@@ -79,12 +86,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		hash_add_rlog(page_rlog, nrl);
 
 		return rl;
-	} else if (!rl) { // new page
-		rl = rlog_malloc();
-		rl->key = page;
-		hash_add_rlog(page_rlog, rl);
-		return rl;
-	} else return NULL; // no new rlog
+	} else return NULL;
 }
 
 static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
@@ -115,7 +117,11 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		err = log_append(log, &ent, &ei);
 		if (likely(!err)) {
 			struct transaction *tran = log_tail_tran(log);
-			on_write_new_page(log, tran->stat, copied);
+			if (rl->enti == LOG_LEN) {
+				on_write_old_page(log, tran->stat, copied);
+			} else {
+				on_write_new_page(log, tran->stat, copied);
+			}
 			rl->enti = ei;
 #ifdef RFFS_TRACE
 			printk(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,

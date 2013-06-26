@@ -125,18 +125,38 @@ static inline int rffs_writepage(handle_t *handle, struct page *page, unsigned i
 	return __rffs_journalled_writepage(handle, page, len);
 }
 
-static handle_t *rffs_trans_begin(int npages, void *data) {
-	struct inode *inode = (struct inode *)data;
-	int nblocks = npages * jbd2_journal_blocks_per_page(inode);
-	return ext4_journal_start_sb(inode->i_sb, nblocks);
+static handle_t *rffs_trans_begin(int npages, void *arg) {
+	struct super_block *sb = (struct super_block *)arg;
+	int blocks_per_page = 1 << (PAGE_CACHE_SHIFT - sb->s_blocksize_bits);
+	int nblocks = npages * blocks_per_page;
+	return ext4_journal_start_sb(sb, nblocks);
 }
 
 static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
 	return rffs_writepage(handle, (struct page *)ent->data, ent->len);
 }
 
-static int rffs_trans_end(handle_t *handle) {
-	return ext4_journal_stop(handle);
+static int rffs_trans_end(handle_t *handle, void *arg) {
+	struct super_block *sb = (struct super_block *)arg;
+	journal_t *journal = EXT4_SB(sb)->s_journal;
+	int err;
+
+	handle->h_sync = 1;
+	err = ext4_journal_stop(handle);
+	if (likely(!err)) {
+		tid_t commit_tid = handle->h_transaction->t_tid;
+		jbd2_log_start_commit(journal, commit_tid);
+		err = jbd2_log_wait_commit(journal, commit_tid);
+		blkdev_issue_flush(sb->s_bdev, GFP_KERNEL, NULL);
+	} else {
+		printk(KERN_ERR "[rffs] rffs_trans_end fails to stop journal: %d\n", err);
+		return err;
+	}
+
+	if (unlikely(err)) {
+		printk(KERN_ERR "[rffs] rffs_trans_end fails to wait commit: %d\n", err);
+	}
+	return err;
 }
 
 const struct flush_operations rffs_fops = {

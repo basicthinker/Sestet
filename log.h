@@ -169,9 +169,9 @@ static inline int log_sort(struct rffs_log *log, int begin, int end) {
 }
 
 struct flush_operations {
-	handle_t *(*trans_begin)(int nent, void *arg);
+	handle_t *(*trans_begin)(int nent, void *data);
 	int (*ent_flush)(handle_t *handle, struct log_entry *ent);
-	int (*trans_end)(handle_t *handle);
+	int (*trans_end)(handle_t *handle, void *data);
 };
 
 extern struct flush_operations flush_ops;

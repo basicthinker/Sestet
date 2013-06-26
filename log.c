@@ -117,21 +117,23 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 {
 #ifdef __KERNEL__
 	struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
-	hash_del(&rl->hnode);
 	if (ent_valid(*ent)) flush_ops.ent_flush(handle, ent);
 	if (PageChecked(rl->key)) {
+		hash_del(&rl->hnode);
 		rl->key->mapping = NULL;
 		__free_page(rl->key);
+		rlog_free(rl);
+	} else {
+		rl->enti = LOG_LEN;
 	}
-	rlog_free(rl);
 	return 0;
 #endif
 	PRINT("[rffs] flushing ent data %p.\n", ent->data);
 	return 0;
 }
 
-static inline int do_trans_end(handle_t *handle) {
-	if (flush_ops.trans_end) return flush_ops.trans_end(handle);
+static inline int do_trans_end(handle_t *handle, void *arg) {
+	if (flush_ops.trans_end) return flush_ops.trans_end(handle, arg);
 	else return 0;
 }
 
@@ -142,6 +144,9 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     struct log_entry *entries = log->l_entries;
     struct transaction *tran;
     handle_t *handle;
+#ifdef __KERNEL__
+    struct super_block *sb;
+#endif
 
     begin = end = log->l_begin;
     while (nr) {
@@ -174,24 +179,32 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
-    while (!ent_valid(entry(begin))) ++begin;
-    handle = do_trans_begin(end - begin,
-    		((struct page *)entry(begin).data)->mapping->host);
+    while (!ent_valid(entry(begin))) {
+        do_flush(NULL, &entry(begin)); // only clears page/rlog if necessary
+        ++begin;
+    }
+    sb = ((struct page *)entry(begin).data)->mapping->host->i_sb;
+    handle = do_trans_begin(end - begin, sb);
 #else
     handle = do_trans_begin(end - begin, NULL);
 #endif
     for (i = begin; i < end; ++i) {
-    	err = do_flush(handle, &entry(i));
-    	if (unlikely(err)) {
-    		log->l_begin = i;
-    		PRINT("[rffs] __log_flush stops at %d (%d - %d)\n", i, begin, end);
-    		break;
-    	} else {
-    		PRINT("[rffs]\t(%d)\t%lu\t%lu\t%lu\n",
-    				i, entry(i).inode_id, entry(i).index, entry(i).len);
-    	}
+        err = do_flush(handle, &entry(i));
+        if (unlikely(err)) {
+            log->l_begin = i;
+            PRINT("[rffs] __log_flush stops at %d (%d - %d)\n", i, begin, end);
+            break;
+        } else {
+            PRINT("[rffs]\t(%d)\t%lu\t%lu\t%lu\n",
+                    i, entry(i).inode_id, entry(i).index, entry(i).len);
+        }
     }
-    err = do_trans_end(handle);
+#ifdef __KERNEL__
+    err = do_trans_end(handle, sb);
+#else
+    err = do_trans_end(handle, NULL);
+#endif
+
     log->l_begin = end;
 
     return err;
