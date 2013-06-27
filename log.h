@@ -28,10 +28,15 @@ typedef int handle_t;
 #endif
 
 #define L_INDEX(p) (p & LOG_MASK)
+#define L_NULL  LOG_LEN
 
-#define DIST(a, b) (a <= b ? b - a : UINT_MAX - a + b + 1)
+#define L_DIST(a, b) ((a) <= (b) ? (b) - (a) : UINT_MAX - (a) + (b) + 1)
+#define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
+#define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
 
-#define LESS(a, b) (a != b && DIST(a, b) <= LOG_LEN)
+#define LEN_SHIFT   (PAGE_CACHE_SHIFT + 1)
+#define LEN_SIZE    (PAGE_CACHE_SIZE << 1)
+#define LEN_MASK    (~(LEN_SIZE - 1))
 
 struct log_entry {
     unsigned long inode_id; // ULONG_MAX indicates invalid entry
@@ -42,8 +47,10 @@ struct log_entry {
 
 #define ent_inval(ent) { (ent).inode_id = ULONG_MAX; }
 #define ent_valid(ent) ((ent).inode_id != ULONG_MAX)
-#define ent_len(ent) ((ent).length & (PAGE_CACHE_SIZE - 1))
-#define ent_seq(ent) ((ent).length & PAGE_CACHE_MASK)
+#define ent_len(ent) ((ent).length & (LEN_SIZE - 1))
+#define set_len(ent, l) ((ent).length &= LEN_MASK, (ent).length += (l))
+#define ent_seq(ent) ((ent).length >> LEN_SHIFT)
+#define add_seq(ent, n) ((ent).length += (n) << LEN_SHIFT)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
@@ -119,7 +126,7 @@ static inline void __log_seal(struct rffs_log *log) {
                 log->l_begin, log->l_head, end);
         return;
     }
-    if (DIST(log->l_begin, end) > LOG_LEN) {
+    if (L_DIST(log->l_begin, end) > LOG_LEN) {
         end = log->l_begin + LOG_LEN;
     }
 
@@ -141,9 +148,9 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
 	int err;
     unsigned int tail = (unsigned int)atomic_inc_return(&log->l_end) - 1;
 
-    if (DIST(log->l_begin, tail) >= LOG_LEN) {
+    if (L_DIST(log->l_begin, tail) >= LOG_LEN) {
         spin_lock(&log->l_lock);
-        while (DIST(log->l_begin, tail) >= LOG_LEN) {
+        while (L_DIST(log->l_begin, tail) >= LOG_LEN) {
             err = __log_flush(log, 1);
             if (err == -ENODATA) {
                 __log_seal(log);

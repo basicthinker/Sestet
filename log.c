@@ -97,7 +97,8 @@ int __log_sort(struct rffs_log *log, int begin, int end) {
 static void merge_inval(struct log_entry entries[], int begin, int end) {
 	int i;
 	for (i = begin + 1; i < end; ++i) {
-		if (comp_entry(&entry(i - 1), &entry(i)) == 0) {
+		if (entry(i - 1).inode_id == entry(i).inode_id &&
+				entry(i - 1).index == entry(i).index) {
 			ent_inval(entry(i - 1));
 			if (ent_len(entry(i)) < ent_len(entry(i - 1)))
 				entry(i).length = entry(i - 1).length;
@@ -124,9 +125,8 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 		__free_page(rl->key);
 		rlog_free(rl);
 	} else {
-		rl->enti = LOG_LEN;
+		rl->enti = L_NULL;
 	}
-	return 0;
 #endif
 	PRINT("[rffs]\t%lu\t%lu\t%lu\t%lu\n",
 	        ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));

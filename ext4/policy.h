@@ -15,35 +15,36 @@ struct tran_stat {
 	unsigned long latency;
 };
 
-#define init_stat(stat) do {	\
-	stat.merg_size = 0;			\
-	stat.staleness = 0;			\
-	stat.latency = 0;			\
+#define init_stat(stat) do {    \
+	stat.merg_size = 0; \
+	stat.staleness = 0; \
+	stat.latency = 0;   \
 } while(0)
 
-#define opt_ratio(tran_stat)	\
+#define opt_ratio(tran_stat)    \
 	((float)tran_stat.merg_size/tran_stat.staleness)
-#define ls_ratio(tran_stat)	\
+#define ls_ratio(tran_stat) \
 	((float)tran_stat.latency/tran_stat.staleness)
 
-#define on_write_old_page(logp, tran_stat, size) {	\
-	tran_stat.merg_size += size;					\
-	tran_stat.staleness += size;					\
-	if (tran_stat.staleness >= 4 * PAGE_SIZE) {		\
-		log_seal(logp);								\
-	}												\
+#define on_write_old_page(logp, tran_stat, size) {  \
+	tran_stat.merg_size += size;    \
+	tran_stat.staleness += size;    \
+	if (tran_stat.staleness >= 4 * PAGE_SIZE) { \
+		log_seal(logp); \
+        if (L_DIST(logp->l_begin, logp->l_head) >= 4) \
+            log_flush(logp, 2); \
+	}   \
 }
 
-#define on_write_new_page(logp, tran_stat, size) {	\
-	tran_stat.staleness += size;					\
-	if (tran_stat.staleness >= 4 * PAGE_SIZE) {		\
-		log_seal(logp);								\
-	}												\
-													\
-	tran_stat.latency += 1;							\
-	if (DIST(logp->l_begin, logp->l_head) >= 4) {	\
-		log_flush(logp, 2);							\
-	}												\
+#define on_write_new_page(logp, tran_stat, size) {  \
+	tran_stat.staleness += size;    \
+	if (tran_stat.staleness >= 4 * PAGE_SIZE) { \
+		log_seal(logp); \
+	    if (L_DIST(logp->l_begin, logp->l_head) >= 4) \
+	        log_flush(logp, 2); \
+	}   \
+    \
+	tran_stat.latency += 1; \
 }
 
 #endif /* RFFS_POLICY_H_ */

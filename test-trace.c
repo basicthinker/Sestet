@@ -10,7 +10,7 @@ void init_page(char *page, char c) {
 }
 
 int main(int argc, char *argv[]) {
-  int i;
+  int i, fd;
   FILE *fp;
   char page[PAGE_SIZE];
 
@@ -26,10 +26,12 @@ int main(int argc, char *argv[]) {
   }
 
   // merge
-  for (i = 0; i < 10; ++i) {
+  for (i = 0; i < 24; ++i) {
     init_page(page, i + '0');
     fwrite(page, sizeof(page), 1, fp);
     fflush(fp);
+    fd = fileno(fp);
+    fsync(fd);
     if (i % 2) rewind(fp);
   }
 
