@@ -99,8 +99,8 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	for (i = begin + 1; i < end; ++i) {
 		if (comp_entry(&entry(i - 1), &entry(i)) == 0) {
 			ent_inval(entry(i - 1));
-			if (entry(i).len < entry(i - 1).len)
-				entry(i).len = entry(i - 1).len;
+			if (ent_len(entry(i)) < ent_len(entry(i - 1)))
+				entry(i).length = entry(i - 1).length;
 		}
 	}
 }
@@ -128,7 +128,8 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 	}
 	return 0;
 #endif
-	PRINT("[rffs] flushing ent data %p.\n", ent->data);
+	PRINT("[rffs]\t%lu\t%lu\t%lu\t%lu\n",
+	        ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
 	return 0;
 }
 
@@ -167,7 +168,7 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
     	return -ENODATA;
     }
 
-    PRINT("[rffs]\t(-1)\t%d\n", end - begin);
+    PRINT("[rffs]\t-1\t%d\n", end - begin);
     err = __log_sort(log, begin, end);
     if (err) {
         PRINT("[Err%d] log_sort() failed.\n", err);
@@ -194,9 +195,6 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
             log->l_begin = i;
             PRINT("[rffs] __log_flush stops at %d (%d - %d)\n", i, begin, end);
             break;
-        } else {
-            PRINT("[rffs]\t(%d)\t%lu\t%lu\t%lu\n",
-                    i, entry(i).inode_id, entry(i).index, entry(i).len);
         }
     }
 #ifdef __KERNEL__

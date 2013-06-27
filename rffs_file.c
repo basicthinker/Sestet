@@ -62,9 +62,10 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	if (!rl) { // new page
                 rl = rlog_malloc();
                 rl->key = page;
+                rl->enti = LOG_LEN;
                 hash_add_rlog(page_rlog, rl);
                 return rl;
-	} else if (rl->enti == LOG_LEN) {
+	} else if (rl->enti == LOG_LEN) { // running page
 		return rl;
 	} else if (LESS(rl->enti, log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
@@ -86,7 +87,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		hash_add_rlog(page_rlog, nrl);
 
 		return rl;
-	} else return NULL;
+	} else return NULL; // active page
 }
 
 static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
@@ -98,7 +99,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 	BUG_ON(li > MAX_LOG_NUM);
 
-	if (!rl) {
+	if (!rl) { // active page
 		struct transaction *tran = log_tail_tran(log);
 		on_write_old_page(log, tran->stat, copied);
 #ifdef RFFS_TRACE
@@ -111,17 +112,16 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 		ent.inode_id = host->i_ino;
 		ent.index = ((struct page *)rl->key)->index;
-		ent.len = offset + copied;
+		ent.length = offset + copied;
 		ent.data = rl->key;
 
 		err = log_append(log, &ent, &ei);
 		if (likely(!err)) {
 			struct transaction *tran = log_tail_tran(log);
-			if (rl->enti == LOG_LEN) {
-				on_write_old_page(log, tran->stat, copied);
-			} else {
-				on_write_new_page(log, tran->stat, copied);
+			if (rl->enti != LOG_LEN) { // COW page
+				ent.length += (ent_seq(L_ENT(log, rl->enti)) + PAGE_CACHE_SIZE);
 			}
+			on_write_new_page(log, tran->stat, copied);
 			rl->enti = ei;
 #ifdef RFFS_TRACE
 			printk(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,

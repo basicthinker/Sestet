@@ -282,7 +282,7 @@ static inline void ent_flush(handle_t *handle, struct log_entry *ent)
 	struct page *page = (struct page *)ent->data;
 	void *addr = kmap_atomic(page, KM_USER0);
 	printk("[rffs] flushing page %p with %c of length %lu.\n",
-			addr, *(char *)addr, ent->len);
+			addr, *(char *)addr, ent_len(*ent));
 	kunmap_atomic(addr, KM_USER0);
 }
 

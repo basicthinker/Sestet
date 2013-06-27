@@ -36,17 +36,22 @@ typedef int handle_t;
 struct log_entry {
     unsigned long inode_id; // ULONG_MAX indicates invalid entry
     unsigned long index;
-    unsigned long len;
+    unsigned long length;
     void *data;
 };
 
 #define ent_inval(ent) { (ent).inode_id = ULONG_MAX; }
 #define ent_valid(ent) ((ent).inode_id != ULONG_MAX)
+#define ent_len(ent) ((ent).length & (PAGE_CACHE_SIZE - 1))
+#define ent_seq(ent) ((ent).length & PAGE_CACHE_MASK)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
-	else if (a->inode_id == b->inode_id) return a->index - b->index;
-	else return 1;
+	else if (a->inode_id == b->inode_id) {
+	    if (a->index < b->index) return -1;
+	    else if (a->index == b->index) return ent_seq(*a) - ent_seq(*b);
+	    else return 1;
+	} else return 1;
 }
 
 struct transaction {

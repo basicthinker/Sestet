@@ -133,7 +133,7 @@ static handle_t *rffs_trans_begin(int npages, void *arg) {
 }
 
 static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
-	return rffs_writepage(handle, (struct page *)ent->data, ent->len);
+	return rffs_writepage(handle, (struct page *)ent->data, ent_len(*ent));
 }
 
 static int rffs_trans_end(handle_t *handle, void *arg) {

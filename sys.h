@@ -49,6 +49,10 @@
 #ifndef __KERNEL__
 	#include "atomic.h"
     #define likely(cond) (cond)
+    #define unlikely(cond) (cond)
+    #define ULONG_MAX (~0UL)
+    #define PAGE_CACHE_SIZE 4096
+    #define PAGE_CACHE_MASK (~(PAGE_CACHE_SIZE - 1))
 #endif
 
 #endif // SESTET_RFFS_SYS_H_
