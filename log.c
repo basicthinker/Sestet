@@ -197,13 +197,13 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
             break;
         }
     }
+    log->l_begin = end;
+    spin_unlock(&log->l_lock);
 #ifdef __KERNEL__
     err = do_trans_end(handle, sb);
 #else
     err = do_trans_end(handle, NULL);
 #endif
-
-    log->l_begin = end;
-
+    spin_lock(&log->l_lock);
     return err;
 }

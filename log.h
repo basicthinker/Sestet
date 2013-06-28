@@ -151,10 +151,10 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     if (L_DIST(log->l_begin, tail) >= LOG_LEN) {
         spin_lock(&log->l_lock);
         while (L_DIST(log->l_begin, tail) >= LOG_LEN) {
-            err = __log_flush(log, 1);
+            err = log_flush(log, 1);
             if (err == -ENODATA) {
-                __log_seal(log);
-                err = __log_flush(log, 1);
+                log_seal(log);
+                err = log_flush(log, 1);
             }
             if (err) {
                 PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",

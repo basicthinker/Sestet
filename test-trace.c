@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #define PAGE_SIZE 4096
 
@@ -26,7 +27,7 @@ int main(int argc, char *argv[]) {
   }
 
   // merge
-  for (i = 0; i < 26; ++i) {
+  for (i = 0; i < 38; ++i) {
     init_page(page, i + '0');
     fwrite(page, sizeof(page), 1, fp);
     if (i % 2) {
