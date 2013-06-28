@@ -177,6 +177,7 @@ int ext4_sync_file(struct file *file, int datasync)
 	J_ASSERT(ext4_journal_current_handle() == NULL);
 
 	trace_ext4_sync_file_enter(file, datasync);
+	printk("[rffs] ext4_sync_file for inode %lu\n", inode->i_ino);
 
 	if (inode->i_sb->s_flags & MS_RDONLY)
 		return 0;
@@ -186,6 +187,7 @@ int ext4_sync_file(struct file *file, int datasync)
 		goto out;
 
 	if (!journal) {
+	    printk("[rffs] ext4_sync_file: no journal.\n");
 		ret = generic_file_fsync(file, datasync);
 		if (!ret && !list_empty(&inode->i_dentry))
 			ret = ext4_sync_parent(inode);

@@ -26,13 +26,15 @@ int main(int argc, char *argv[]) {
   }
 
   // merge
-  for (i = 0; i < 24; ++i) {
+  for (i = 0; i < 26; ++i) {
     init_page(page, i + '0');
     fwrite(page, sizeof(page), 1, fp);
-    fflush(fp);
-    fd = fileno(fp);
-    fsync(fd);
-    if (i % 2) rewind(fp);
+    if (i % 2) {
+      rewind(fp);
+      fflush(fp);
+      fd = fileno(fp);
+      fsync(fd);
+    }
   }
 
   fclose(fp);

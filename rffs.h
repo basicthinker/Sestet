@@ -20,6 +20,10 @@ struct flush_operations;
 extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos);
 
+static int rffs_sync_file(struct file *file, int datasync) {
+	return 0;
+}
+
 /* Hooks */
 extern int rffs_init_hook(const struct flush_operations *fops);
 extern void rffs_exit_hook(void);
