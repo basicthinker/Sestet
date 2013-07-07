@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
     Check data after removal: 't'.
   2. Unexpected removal after 5 fsync's (stdout lines)
     Check dmesg log: should have 2 rffs flushes.
-    Check data after removal: 'h'.
+    Check data after removal: 'h'. (If we use ext4, this would be 'j'.)
   3. Disable fsync and repeat the above.
 */
 

@@ -51,7 +51,8 @@
     #define likely(cond) (cond)
     #define unlikely(cond) (cond)
     #define ULONG_MAX (~0UL)
-    #define PAGE_CACHE_SIZE 4096
+    #define PAGE_CACHE_SHIFT 12
+    #define PAGE_CACHE_SIZE (1 << PAGE_CACHE_SHIFT)
     #define PAGE_CACHE_MASK (~(PAGE_CACHE_SIZE - 1))
 #endif
 

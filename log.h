@@ -108,15 +108,7 @@ static inline void log_init(struct rffs_log *log) {
     __log_add_tran(log);
 }
 
-extern int __log_flush(struct rffs_log *log, unsigned int nr);
-
-static inline int log_flush(struct rffs_log *log, unsigned int nr) {
-    int ret;
-    spin_lock(&log->l_lock);
-    ret = __log_flush(log, nr);
-    spin_unlock(&log->l_lock);
-    return ret;
-}
+extern int log_flush(struct rffs_log *log, unsigned int nr);
 
 static inline void __log_seal(struct rffs_log *log) {
     struct transaction *tran = log_tail_tran(log);
@@ -144,26 +136,22 @@ static inline void log_seal(struct rffs_log *log) {
 }
 
 static inline int log_append(struct rffs_log *log, struct log_entry *entry,
-		unsigned int *enti) {
-	int err;
+        unsigned int *enti) {
+    int err;
     unsigned int tail = (unsigned int)atomic_inc_return(&log->l_end) - 1;
 
-    if (L_DIST(log->l_begin, tail) >= LOG_LEN) {
-        spin_lock(&log->l_lock);
-        while (L_DIST(log->l_begin, tail) >= LOG_LEN) {
+    while (L_DIST(log->l_begin, tail) >= LOG_LEN) {
+        err = log_flush(log, 1);
+        if (err == -ENODATA) {
+            log_seal(log);
             err = log_flush(log, 1);
-            if (err == -ENODATA) {
-                log_seal(log);
-                err = log_flush(log, 1);
-            }
-            if (err) {
-                PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",
-                        err, entry->inode_id, entry->index);
-                spin_unlock(&log->l_lock);
-                return err;
-            }
         }
-        spin_unlock(&log->l_lock);
+        if (err) {
+            PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",
+                    err, entry->inode_id, entry->index);
+            spin_unlock(&log->l_lock);
+            return err;
+        }
     }
     L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;

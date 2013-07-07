@@ -128,8 +128,8 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 		rl->enti = L_NULL;
 	}
 #endif
-	PRINT("[rffs]\t%lu\t%lu\t%lu\t%lu\n",
-	        ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
+	PRINT("[rffs]\t%ld\t%lu\t%lu\t%lu\n",
+	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
 	return 0;
 }
 
@@ -138,7 +138,7 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
-int __log_flush(struct rffs_log *log, unsigned int nr) {
+static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     unsigned int begin, end;
     unsigned int i;
     int err = 0;
@@ -164,19 +164,16 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
         --nr;
     }
     if (begin == end) {
-    	PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);
-    	return -ENODATA;
+        PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);
+        return -ENODATA;
     }
+    spin_unlock(&log->l_lock);
 
-    PRINT("[rffs]\t-1\t%d\n", end - begin);
+    PRINT("[rffs] num_entries=%d\n", end - begin);
     err = __log_sort(log, begin, end);
     if (err) {
-        PRINT("[Err%d] log_sort() failed.\n", err);
-        tran = (struct transaction *)MALLOC(sizeof(struct transaction));
-        tran->begin = begin;
-        tran->end = end;
-        list_add(&tran->list, &log->l_trans);
-        return -EAGAIN;
+        PRINT("[Err%d] log_sort(%u, %u) failed for log %p.\n",
+                err, begin, end, log);
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
@@ -197,13 +194,22 @@ int __log_flush(struct rffs_log *log, unsigned int nr) {
             break;
         }
     }
-    log->l_begin = end;
-    spin_unlock(&log->l_lock);
+
 #ifdef __KERNEL__
     err = do_trans_end(handle, sb);
 #else
     err = do_trans_end(handle, NULL);
 #endif
+
     spin_lock(&log->l_lock);
+    log->l_begin = end; // assumes no other competitors for flush
     return err;
+}
+
+int log_flush(struct rffs_log *log, unsigned int nr) {
+    int ret;
+    spin_lock(&log->l_lock);
+    ret = __log_flush(log, nr);
+    spin_unlock(&log->l_lock);
+    return ret;
 }

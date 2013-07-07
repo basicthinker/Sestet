@@ -138,20 +138,10 @@ static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
 
 static int rffs_trans_end(handle_t *handle, void *arg) {
 	struct super_block *sb = (struct super_block *)arg;
-	journal_t *journal = EXT4_SB(sb)->s_journal;
 	int err;
 
 	handle->h_sync = 1;
 	err = ext4_journal_stop(handle);
-	if (likely(!err)) {
-		tid_t commit_tid = handle->h_transaction->t_tid;
-		jbd2_log_start_commit(journal, commit_tid);
-		err = jbd2_log_wait_commit(journal, commit_tid);
-		blkdev_issue_flush(sb->s_bdev, GFP_KERNEL, NULL);
-	} else {
-		printk(KERN_ERR "[rffs] rffs_trans_end fails to stop journal: %d\n", err);
-		return err;
-	}
 
 	if (unlikely(err)) {
 		printk(KERN_ERR "[rffs] rffs_trans_end fails to wait commit: %d\n", err);

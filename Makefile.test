@@ -1,15 +1,16 @@
 CC = gcc
-CFLAGS += -g -Wall -pthread
+CCC = arm-none-linux-gnueabi-gcc # to cross-compile
+CFLAGS += -Wall # -g
 LIB = -lpthread
 HEADERS = log.h sys.h list.h atomic.h
 
 all : test-sort test-trace
 
 test-sort : log.c test-sort.c $(HEADERS)
-	$(CC) $(CFLAGS) $(LIB) -o test-sort.out $^
+	$(CC) $(CFLAGS) -pthread $(LIB) -o $@.out $^
 
 test-trace : test-trace.c
-	$(CC) $(CFLAGS) $(LIB) -o test-trace.out $^
+	$(CCC) $(CFLAGS) -static -march=armv7-a -o $@.o $^
 
 clean :
 	rm -rf *.out
