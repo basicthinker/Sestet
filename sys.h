@@ -11,16 +11,6 @@
 
 #define UINT_MAX (~0U)
 
-#ifdef __KERNEL__ // Linux kernel space
-    #include <linux/slab.h>
-    #define MALLOC(size) kmalloc(size, GFP_KERNEL)
-    #define MFREE(p) kfree(p)
-#else
-    #include <stdlib.h>
-    #define MALLOC(size) malloc(size)
-    #define MFREE(p) free(p)
-#endif
-
 #ifdef __KERNEL__
     #include <linux/spinlock.h>
     #define spin_lock_destroy(lock)

@@ -26,6 +26,10 @@
   b = tmp;                      \
 } while(0)
 
+#ifdef __KERNEL__
+struct kmem_cache *rffs_tran_cachep;
+#endif
+
 struct stack_elem {
     unsigned int left;
     unsigned int right;
@@ -160,8 +164,12 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         }
         end = tran->end;
         list_del(&tran->list);
-        MFREE(tran);
         --nr;
+#ifdef __KERNEL__
+        kmem_cache_free(rffs_tran_cachep, tran);
+#else
+        free(tran);
+#endif
     }
     if (begin == end) {
         PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);

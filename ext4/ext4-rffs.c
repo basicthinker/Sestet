@@ -137,7 +137,6 @@ static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
 }
 
 static int rffs_trans_end(handle_t *handle, void *arg) {
-	struct super_block *sb = (struct super_block *)arg;
 	int err;
 
 	handle->h_sync = 1;

@@ -1,4 +1,4 @@
-ccflags-y += -DRFFS_TRACE -DRFFS_DEBUG
+ccflags-y += -DRFFS_DEBUG
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
 
 obj-m += rffs.o

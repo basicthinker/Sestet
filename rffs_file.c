@@ -32,12 +32,16 @@ DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
 
 int rffs_init_hook(const struct flush_operations *fops)
 {
-	atomic_set(&logi, 0);
-	log_init(&rffs_logs[0]);
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
-	if (!rffs_rlog_cachep)
+	rffs_tran_cachep = kmem_cache_create("rffs_tran_cachep", sizeof(struct transaction),
+			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
+	if (!rffs_rlog_cachep || !rffs_tran_cachep)
 		return -ENOMEM;
+
+	atomic_set(&logi, 0);
+	log_init(&rffs_logs[0]);
+
 	if (fops) flush_ops = *fops;
 	return 0;
 }
@@ -45,6 +49,7 @@ int rffs_init_hook(const struct flush_operations *fops)
 void rffs_exit_hook(void)
 {
 	kmem_cache_destroy(rffs_rlog_cachep);
+	kmem_cache_destroy(rffs_tran_cachep);
 }
 
 static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
@@ -111,10 +116,8 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl->key, rl->enti, log->l_head);
 #endif
 		on_write_old_page(log, tran->stat, copied);
-#ifdef RFFS_TRACE
-		printk(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
-#endif
 	} else {
 		unsigned int ei, es;
 		struct log_entry ent;
@@ -140,10 +143,8 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 		tran = log_tail_tran(log);
 		on_write_new_page(log, tran->stat, copied);
-#ifdef RFFS_TRACE
-		printk(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
+		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
-#endif
 	}
 	return err;
 }
@@ -210,6 +211,9 @@ again:
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		pagefault_enable();
 		flush_dcache_page(page);
+		RFFS_TRACE(KERN_INFO "[rffs] rffs_perform_write copies from user: "
+				"ino=%lu, idx=%lu, off=%lu, copy=%u\n",
+				page->mapping->host->i_ino, page->index, offset, copied);
 
 		mark_page_accessed(page);
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
@@ -314,7 +318,8 @@ static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iov
 	written = rffs_file_buffered_write(iocb, iov, nr_segs, pos, ppos, count,
 			written);
 	//}
-	out: current->backing_dev_info = NULL;
+out:
+	current->backing_dev_info = NULL;
 	return written ? written : err;
 }
 
@@ -347,3 +352,6 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	return ret;
 }
 
+int rffs_sync_file(struct file *file, int datasync) {
+	return 0;
+}

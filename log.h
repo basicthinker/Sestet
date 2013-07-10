@@ -27,7 +27,7 @@ typedef int handle_t;
     #define LOG_MASK 8191
 #endif
 
-#define L_INDEX(p) (p & LOG_MASK)
+#define L_INDEX(p) ((p) & LOG_MASK)
 #define L_NULL  LOG_LEN
 
 #define L_DIST(a, b) ((a) <= (b) ? (b) - (a) : UINT_MAX - (a) + (b) + 1)
@@ -68,12 +68,27 @@ struct transaction {
     struct list_head list;
 };
 
+#ifdef __KERNEL__
+extern struct kmem_cache *rffs_tran_cachep;
+#endif
+
 #define init_tran(tran) do {		\
-	tran->begin = tran->end = 0;	\
-	init_stat(tran->stat);			\
+	(tran)->begin = (tran)->end = 0;	\
+	init_stat((tran)->stat);			\
 } while(0)
 
-#define is_tran_open(tran) (tran->begin == tran->end)
+static inline struct transaction *new_tran(void) {
+	struct transaction *tran;
+#ifdef __KERNEL__
+	tran = (struct transaction *)kmem_cache_alloc(rffs_tran_cachep, GFP_KERNEL);
+#else
+	tran = (struct transaction *)malloc(sizeof(struct transaction));
+#endif
+	init_tran(tran);
+	return tran;
+}
+
+#define is_tran_open(tran) ((tran)->begin == (tran)->end)
 
 struct rffs_log {
     struct log_entry l_entries[LOG_LEN];
@@ -84,34 +99,29 @@ struct rffs_log {
     spinlock_t l_lock; // to protect the prepared entries
 };
 
-#define L_END(log) (atomic_read(&log->l_end))
-#define L_ENT(log, i) (log->l_entries[L_INDEX(i)])
+#define L_END(log) (atomic_read(&(log)->l_end))
+#define L_ENT(log, i) ((log)->l_entries[L_INDEX(i)])
 
-static inline struct transaction *__log_add_tran(struct rffs_log *log)
-{
-	struct transaction *tran =
-				(struct transaction *)MALLOC(sizeof(struct transaction));
-	init_tran(tran);
-	list_add_tail(&tran->list, &log->l_trans);
-	return tran;
-}
+#define __log_add_tran(log, tran)	\
+	list_add_tail(&(tran)->list, &(log)->l_trans)
 
 #define log_tail_tran(log)	\
-	list_entry(log->l_trans.prev, struct transaction, list)
+	list_entry((log)->l_trans.prev, struct transaction, list)
 
 static inline void log_init(struct rffs_log *log) {
+	struct transaction *tran = new_tran();
     log->l_begin = 0;
     log->l_head = 0;
     atomic_set(&log->l_end, 0);
     INIT_LIST_HEAD(&log->l_trans);
     spin_lock_init(&log->l_lock);
-    __log_add_tran(log);
+    __log_add_tran(log, tran);
 }
 
 extern int log_flush(struct rffs_log *log, unsigned int nr);
 
 static inline void __log_seal(struct rffs_log *log) {
-    struct transaction *tran = log_tail_tran(log);
+	struct transaction *tran = log_tail_tran(log);
     unsigned int end = L_END(log);
     if (log->l_head == end) {
         PRINT("[Warn] nothing to seal: %u-%u-%u\n",
@@ -125,13 +135,14 @@ static inline void __log_seal(struct rffs_log *log) {
     tran->begin = log->l_head;
     tran->end = end;
     log->l_head = tran->end;
-
-    __log_add_tran(log);
 }
 
 static inline void log_seal(struct rffs_log *log) {
+	struct transaction *tran = new_tran();
+
     spin_lock(&log->l_lock);
     __log_seal(log);
+    __log_add_tran(log, tran);
     spin_unlock(&log->l_lock);
 }
 
