@@ -11,6 +11,7 @@
 
 #include <linux/types.h>
 #include <linux/fs.h>
+#include <linux/kthread.h>
 
 struct kiocb;
 struct inovec;
@@ -47,5 +48,13 @@ static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_ino
 	RFFS_TRACE(KERN_INFO "[rffs] rename_hook: %lu->%lu to %lu\n",
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 }
+
+
+/*
+ * Internal things.
+ * Used by RFFS implementation.
+ */
+
+extern struct task_struct *rffs_flusher;
 
 #endif /* RFFS_H_ */

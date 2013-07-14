@@ -14,6 +14,7 @@
 #include <linux/atomic.h>
 #include <linux/fs.h>
 #include <linux/swap.h>
+#include <linux/sched.h>
 #include <asm/errno.h>
 
 #include "log.h"
@@ -24,11 +25,27 @@
 #define MAX_LOG_NUM 20
 
 struct rffs_log rffs_logs[MAX_LOG_NUM];
-static atomic_t logi;
+static atomic_t li_max;
 
 struct kmem_cache *rffs_rlog_cachep;
 
 DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
+
+struct task_struct *rffs_flusher;
+
+int rffs_flush(void *data)
+{
+	int i;
+	while (!kthread_should_stop()) {
+		for (i = 0; i < atomic_read(&li_max); ++i) {
+			log_flush(rffs_logs + i, UINT_MAX);
+		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+	return 0;
+}
 
 int rffs_init_hook(const struct flush_operations *fops)
 {
@@ -39,7 +56,12 @@ int rffs_init_hook(const struct flush_operations *fops)
 	if (!rffs_rlog_cachep || !rffs_tran_cachep)
 		return -ENOMEM;
 
-	atomic_set(&logi, 0);
+	rffs_flusher = kthread_create(rffs_flush, NULL, "rffs_flusher");
+	if (IS_ERR(rffs_flusher)) {
+		return PTR_ERR(rffs_flusher);
+	}
+
+	atomic_set(&li_max, 0);
 	log_init(&rffs_logs[0]);
 
 	if (fops) flush_ops = *fops;
@@ -48,6 +70,9 @@ int rffs_init_hook(const struct flush_operations *fops)
 
 void rffs_exit_hook(void)
 {
+	if (kthread_stop(rffs_flusher) != 0) {
+		printk(KERN_INFO "[rffs] rffs_flusher thread exits unclearly.");
+	}
 	kmem_cache_destroy(rffs_rlog_cachep);
 	kmem_cache_destroy(rffs_tran_cachep);
 }

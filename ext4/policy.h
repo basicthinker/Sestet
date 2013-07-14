@@ -9,6 +9,8 @@
 #ifndef RFFS_POLICY_H_
 #define RFFS_POLICY_H_
 
+#include "rffs.h"
+
 struct tran_stat {
 	unsigned long merg_size;
 	unsigned long staleness;
@@ -34,7 +36,7 @@ struct tran_stat {
 	if (tran_stat.staleness >= (2 * num_pages * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * num_pages)	\
-				log_flush(logp, 2);	\
+			wake_up_process(rffs_flusher);	\
 	}	\
 }
 
@@ -43,7 +45,7 @@ struct tran_stat {
 	if (tran_stat.staleness >= (2 * num_pages * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * num_pages)	\
-				log_flush(logp, 2);	\
+			wake_up_process(rffs_flusher);	\
 	}	\
 	\
 	tran_stat.latency += 1;	\
