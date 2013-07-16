@@ -120,11 +120,21 @@ static inline void log_init(struct rffs_log *log) {
 
 extern int log_flush(struct rffs_log *log, unsigned int nr);
 
+static inline void log_destroy(struct rffs_log *log) {
+	struct transaction *pos, *tmp;
+
+	log_flush(log, UINT_MAX);
+
+	list_for_each_entry_safe(pos, tmp, &log->l_trans, list) {
+		kmem_cache_free(rffs_tran_cachep, pos);
+	}
+}
+
 static inline void __log_seal(struct rffs_log *log) {
 	struct transaction *tran = log_tail_tran(log);
     unsigned int end = L_END(log);
     if (log->l_head == end) {
-        PRINT("[Warn] nothing to seal: %u-%u-%u\n",
+        PRINT(WARNING "[rffs] nothing to seal: %u-%u-%u\n",
                 log->l_begin, log->l_head, end);
         return;
     }

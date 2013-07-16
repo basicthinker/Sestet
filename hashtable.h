@@ -141,7 +141,7 @@ static inline void hash_del_rcu(struct hlist_node *node)
  * hash entry
  * @name: hashtable to iterate
  * @bkt: integer to use as bucket loop cursor
- * @tmp: a &struct used for temporary storage
+ * @tmp: a &struct hlist_node used for temporary storage
  * @obj: the type * to use as a loop cursor for each entry
  * @member: the name of the hlist_node within the struct
  */

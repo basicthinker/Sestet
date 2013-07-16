@@ -132,7 +132,7 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 		rl->enti = L_NULL;
 	}
 #endif
-	PRINT("[rffs]\t%ld\t%lu\t%lu\t%lu\n",
+	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
 	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
 	return 0;
 }
@@ -158,7 +158,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         tran = list_first_entry(&log->l_trans, struct transaction, list);
         if (is_tran_open(tran)) break;
         if (tran->begin != end) {
-            PRINT("[Err] Transactions do not join: %u <-> %u\n",
+            PRINT(ERR "[rffs] Transactions do not join: %u <-> %u\n",
                     end, tran->begin);
             return -EFAULT;
         }
@@ -172,16 +172,16 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
 #endif
     }
     if (begin == end) {
-        PRINT("[Warn] No transaction flushed: l_begin = %u\n", begin);
+    	PRINT(WARNING "[rffs] No transaction flushed: l_begin = %u\n", begin);
         return -ENODATA;
     }
     spin_unlock(&log->l_lock);
 
-    PRINT("[rffs] num_entries=%d\n", end - begin);
+    PRINT(INFO "[rffs] num_entries=%d\n", end - begin);
     err = __log_sort(log, begin, end);
     if (err) {
-        PRINT("[Err%d] log_sort(%u, %u) failed for log %p.\n",
-                err, begin, end, log);
+        PRINT(ERR "[rffs] log_sort(%u, %u) failed for log %p: %d.\n",
+                begin, end, log, err);
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
@@ -198,7 +198,8 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         err = do_flush(handle, &entry(i));
         if (unlikely(err)) {
             log->l_begin = i;
-            PRINT("[rffs] __log_flush stops at %d (%d - %d)\n", i, begin, end);
+            PRINT(ERR "[rffs] __log_flush stops at %d (%d - %d)\n",
+            		i, begin, end);
             break;
         }
     }

@@ -25,9 +25,15 @@
 
 #ifdef __KERNEL__
     #define PRINT(...) printk(__VA_ARGS__)
+	#define INFO KERN_INFO
+	#define WARNING KERN_WARNING
+	#define ERR KERN_ERR
 #else
     #include <stdio.h>
     #define PRINT(...) printf(__VA_ARGS__)
+	#define INFO "INFO - "
+	#define WARNING "WARN - "
+	#define ERR "ERR - "
 #endif
 
 #ifdef __KERNEL__

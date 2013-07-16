@@ -25,7 +25,7 @@
 #define MAX_LOG_NUM 20
 
 struct rffs_log rffs_logs[MAX_LOG_NUM];
-static atomic_t li_max;
+static atomic_t num_logs;
 
 struct kmem_cache *rffs_rlog_cachep;
 
@@ -37,7 +37,7 @@ int rffs_flush(void *data)
 {
 	int i;
 	while (!kthread_should_stop()) {
-		for (i = 0; i < atomic_read(&li_max); ++i) {
+		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log_flush(rffs_logs + i, UINT_MAX);
 		}
 
@@ -61,7 +61,7 @@ int rffs_init_hook(const struct flush_operations *fops)
 		return PTR_ERR(rffs_flusher);
 	}
 
-	atomic_set(&li_max, 0);
+	atomic_set(&num_logs, 1);
 	log_init(&rffs_logs[0]);
 
 	if (fops) flush_ops = *fops;
@@ -70,10 +70,23 @@ int rffs_init_hook(const struct flush_operations *fops)
 
 void rffs_exit_hook(void)
 {
+	int i, bkt;
+	struct hlist_node *tmp;
+	struct rlog *rl;
+
 	if (kthread_stop(rffs_flusher) != 0) {
 		printk(KERN_INFO "[rffs] rffs_flusher thread exits unclearly.");
 	}
+
+	hash_for_each_safe(page_rlog, bkt, tmp, rl, hnode) {
+		hash_del(&rl->hnode);
+		rlog_free(rl);
+	}
 	kmem_cache_destroy(rffs_rlog_cachep);
+
+	for (i = 0; i < atomic_read(&num_logs); ++i) {
+		log_destroy(rffs_logs + i);
+	}
 	kmem_cache_destroy(rffs_tran_cachep);
 }
 
