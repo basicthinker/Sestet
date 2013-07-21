@@ -6,8 +6,6 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
-#include "list.h" // overrides linux/list.h
-
 #include <linux/file.h>
 #include <linux/blkdev.h>
 #include <linux/types.h>
@@ -29,7 +27,8 @@ static atomic_t num_logs;
 
 struct kmem_cache *rffs_rlog_cachep;
 
-DEFINE_HASHTABLE(page_rlog, RLOG_HASH_BITS);
+struct shashtable *page_rlog = &(struct shashtable)
+		SHASHTABLE_UNINIT(RLOG_HASH_BITS);
 
 struct task_struct *rffs_flusher;
 
@@ -56,6 +55,8 @@ int rffs_init_hook(const struct flush_operations *fops)
 	if (!rffs_rlog_cachep || !rffs_tran_cachep)
 		return -ENOMEM;
 
+	sht_init(page_rlog);
+
 	rffs_flusher = kthread_create(rffs_flush, NULL, "rffs_flusher");
 	if (IS_ERR(rffs_flusher)) {
 		return PTR_ERR(rffs_flusher);
@@ -70,17 +71,21 @@ int rffs_init_hook(const struct flush_operations *fops)
 
 void rffs_exit_hook(void)
 {
-	int i, bkt;
-	struct hlist_node *tmp;
+	int i;
+	struct sht_list *sl;
+	struct hlist_head *hl;
+	struct hlist_node *pos, *tmp;
 	struct rlog *rl;
 
 	if (kthread_stop(rffs_flusher) != 0) {
 		printk(KERN_INFO "[rffs] rffs_flusher thread exits unclearly.");
 	}
 
-	hash_for_each_safe(page_rlog, bkt, tmp, rl, hnode) {
-		hash_del(&rl->hnode);
-		rlog_free(rl);
+	for_each_hlist_safe(page_rlog, sl, hl) {
+		hlist_for_each_entry_safe(rl, pos, tmp, hl, hnode) {
+			hlist_del(&rl->hnode);
+			rlog_free(rl);
+		}
 	}
 	kmem_cache_destroy(rffs_rlog_cachep);
 
@@ -88,6 +93,10 @@ void rffs_exit_hook(void)
 		log_destroy(rffs_logs + i);
 	}
 	kmem_cache_destroy(rffs_tran_cachep);
+}
+
+void rffs_free_inode_hook(struct inode *inode) {
+
 }
 
 static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,

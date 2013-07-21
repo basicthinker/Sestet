@@ -124,7 +124,7 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 	struct rlog *rl = hash_find_rlog(page_rlog, ent->data);
 	if (ent_valid(*ent)) flush_ops.ent_flush(handle, ent);
 	if (PageChecked(rl->key)) {
-		hash_del(&rl->hnode);
+		hlist_del(&rl->hnode);
 		rl->key->mapping = NULL;
 		__free_page(rl->key);
 		rlog_free(rl);

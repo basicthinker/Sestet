@@ -23,6 +23,8 @@ struct flush_operations;
 	#define RFFS_TRACE(...)
 #endif
 
+#define RLOG_HASH_BITS 10
+
 /* Replacements */
 extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos);
@@ -49,6 +51,8 @@ static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_ino
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 }
 
+// Put before freeing in-mapping pages
+extern void rffs_free_inode_hook(struct inode *inode);
 
 /*
  * Internal things.
@@ -56,5 +60,9 @@ static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_ino
  */
 
 extern struct task_struct *rffs_flusher;
+
+extern struct kmem_cache *rffs_rlog_cachep;
+
+extern struct shashtable *page_rlog;
 
 #endif /* RFFS_H_ */

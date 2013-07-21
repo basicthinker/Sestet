@@ -13,7 +13,7 @@ rffs-$(CONFIG_EXT4_FS_XATTR)		+= xattr.o xattr_user.o xattr_trusted.o
 rffs-$(CONFIG_EXT4_FS_POSIX_ACL)	+= acl.o
 rffs-$(CONFIG_EXT4_FS_SECURITY)		+= xattr_security.o
 
-ccflags-y += -DRFFS_DEBUG
+#ccflags-y += -DRFFS_DEBUG
 
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
 
