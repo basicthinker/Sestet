@@ -23,10 +23,10 @@ struct rlog {
 
 #define rlog_free(p) (kmem_cache_free(rffs_rlog_cachep, p))
 
-#define hash_add_rlog(sht, rlog) \
+#define add_rlog(sht, rlog) \
 		sht_add_entry(sht, rlog, key, hnode)
 
-#define hash_find_rlog(sht, page) \
+#define find_rlog(sht, page) \
 		sht_find_entry(sht, page, struct rlog, key, hnode)
 
 #endif /* RFFS_RLOG_H_ */

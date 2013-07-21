@@ -69,7 +69,7 @@ struct shashtable {
 			if (hlist_entry(pos, type, node_member)->key_member == (key)) break; \
 		} \
 		sht_put_possible_hlist(hl); \
-		hlist_entry(pos, type, node_member); })
+		pos ? hlist_entry(pos, type, node_member) : NULL; })
 
 #define for_each_hlist(sht, sl, hl) \
 		for (sl = (sht)->lists + ((1 << (sht)->bits) - 1); \

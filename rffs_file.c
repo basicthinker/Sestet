@@ -59,6 +59,7 @@ int rffs_init_hook(const struct flush_operations *fops)
 
 	rffs_flusher = kthread_create(rffs_flush, NULL, "rffs_flusher");
 	if (IS_ERR(rffs_flusher)) {
+		printk(KERN_ERR "[rffs] kthread_create() failed: %ld\n", PTR_ERR(rffs_flusher));
 		return PTR_ERR(rffs_flusher);
 	}
 
@@ -109,13 +110,13 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	BUG_ON(li > MAX_LOG_NUM);
 	BUG_ON(PageChecked(page));
 
-	rl = hash_find_rlog(page_rlog, page);
+	rl = find_rlog(page_rlog, page);
 
 	if (!rl) { // new page
         rl = rlog_malloc();
         rl->key = page;
         rl->enti = L_NULL;
-        hash_add_rlog(page_rlog, rl);
+        add_rlog(page_rlog, rl);
 #ifdef DEBUG_PRP
         printk(KERN_DEBUG "[rffs] NP 1: %p\n", rl->key);
 #endif
@@ -136,7 +137,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		L_ENT(log, nrl->enti).data = cpage;
 
 		SetPageChecked(cpage); // indicates out of page cache
-		hash_add_rlog(page_rlog, nrl);
+		add_rlog(page_rlog, nrl);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[rffs] COW 1: %p\n", rl->key);
 #endif
