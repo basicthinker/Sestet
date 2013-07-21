@@ -57,16 +57,17 @@ int rffs_init_hook(const struct flush_operations *fops)
 
 	sht_init(page_rlog);
 
-	rffs_flusher = kthread_create(rffs_flush, NULL, "rffs_flusher");
-	if (IS_ERR(rffs_flusher)) {
-		printk(KERN_ERR "[rffs] kthread_create() failed: %ld\n", PTR_ERR(rffs_flusher));
-		return PTR_ERR(rffs_flusher);
-	}
-
 	atomic_set(&num_logs, 1);
 	log_init(&rffs_logs[0]);
 
 	if (fops) flush_ops = *fops;
+
+	rffs_flusher = kthread_run(rffs_flush, NULL, "rffs_flusher");
+	if (IS_ERR(rffs_flusher)) {
+		printk(KERN_ERR "[rffs] kthread_run() failed: %ld\n", PTR_ERR(rffs_flusher));
+		return PTR_ERR(rffs_flusher);
+	}
+
 	return 0;
 }
 

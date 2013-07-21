@@ -122,7 +122,8 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 {
 #ifdef __KERNEL__
 	struct rlog *rl = find_rlog(page_rlog, ent->data);
-	if (ent_valid(*ent)) flush_ops.ent_flush(handle, ent);
+	if (ent_valid(*ent) && flush_ops.ent_flush)
+		flush_ops.ent_flush(handle, ent);
 	if (PageChecked(rl->key)) {
 		hlist_del(&rl->hnode);
 		rl->key->mapping = NULL;
