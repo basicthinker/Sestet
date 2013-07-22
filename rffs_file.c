@@ -16,12 +16,9 @@
 #include <linux/pagemap.h>
 #include <asm/errno.h>
 
-#include "log.h"
 #include "rlog.h"
 #include "policy.h"
 #include "rffs.h"
-
-#define MAX_LOG_NUM 20
 
 struct rffs_log rffs_logs[MAX_LOG_NUM];
 static atomic_t num_logs;
@@ -98,10 +95,6 @@ void rffs_exit_hook(void)
 	kmem_cache_destroy(rffs_tran_cachep);
 }
 
-void rffs_free_inode_hook(struct inode *inode) {
-
-}
-
 static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		struct page* page)
 {
@@ -161,7 +154,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 	BUG_ON(li > MAX_LOG_NUM);
 
 	if (rl->enti != L_NULL && L_NG(log->l_head, rl->enti)) { // active page
-		struct transaction *tran = log_tail_tran(log);
+		struct transaction *tran = __log_tail_tran(log);
 		set_len(L_ENT(log, rl->enti), offset + copied);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl->key, rl->enti, log->l_head);
@@ -192,7 +185,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		if (unlikely(err)) return err;
 		rl->enti = ei;
 
-		tran = log_tail_tran(log);
+		tran = __log_tail_tran(log);
 		on_write_new_page(log, tran->stat, copied);
 		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);

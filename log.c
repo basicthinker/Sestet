@@ -8,6 +8,7 @@
 
 #ifdef __KERNEL__
 #include "rlog.h"
+#include "rffs.h"
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/page-flags.h>

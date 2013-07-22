@@ -34,9 +34,13 @@ typedef int handle_t;
 #define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
 #define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
 
-#define LEN_SHIFT   (PAGE_CACHE_SHIFT + 1)
-#define LEN_SIZE    (PAGE_CACHE_SIZE << 1)
-#define LEN_MASK    (~(LEN_SIZE - 1))
+#define LE_LEN_SHIFT   (PAGE_CACHE_SHIFT + 1)
+#define LE_LEN_SIZE    (PAGE_CACHE_SIZE << 1)
+#define LE_LEN_MASK    (~(LE_LEN_SIZE - 1))
+
+#define LE_META_NEW	(ULONG_MAX)
+#define LE_META_RM	(ULONG_MAX - 1)
+#define LE_MAX_IDX	(ULONG_MAX - 2)
 
 struct log_entry {
     unsigned long inode_id; // ULONG_MAX indicates invalid entry
@@ -47,10 +51,11 @@ struct log_entry {
 
 #define ent_inval(ent) { (ent).inode_id = ULONG_MAX; }
 #define ent_valid(ent) ((ent).inode_id != ULONG_MAX)
-#define ent_len(ent) ((ent).length & (LEN_SIZE - 1))
-#define set_len(ent, l) ((ent).length &= LEN_MASK, (ent).length += (l))
-#define ent_seq(ent) ((ent).length >> LEN_SHIFT)
-#define add_seq(ent, n) ((ent).length += (n) << LEN_SHIFT)
+#define ent_len(ent) ((ent).length & (LE_LEN_SIZE - 1))
+#define set_len(ent, l) ((ent).length &= LE_LEN_MASK, (ent).length += (l))
+#define ent_seq(ent) ((ent).length >> LE_LEN_SHIFT)
+#define add_seq(ent, n) ((ent).length += (n) << LE_LEN_SHIFT)
+#define ent_meta(ent) ((ent).index > LE_MAX_IDX)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
@@ -62,20 +67,22 @@ static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 }
 
 struct transaction {
-    unsigned int begin;
-    unsigned int end;
     struct tran_stat stat;
     struct list_head list;
+    unsigned int begin;
+    unsigned int end;
+    unsigned int l_meta_min; // the min inode removal index
 };
 
 #ifdef __KERNEL__
 extern struct kmem_cache *rffs_tran_cachep;
 #endif
 
-#define init_tran(tran) do {		\
-	(tran)->begin = (tran)->end = 0;	\
-	init_stat((tran)->stat);			\
-} while(0)
+#define init_tran(tran) do { \
+		init_stat((tran)->stat); \
+		INIT_LIST_HEAD(&(tran)->list); \
+		(tran)->begin = (tran)->end = 0; \
+		(tran)->l_meta_min = UINT_MAX; } while(0)
 
 static inline struct transaction *new_tran(void) {
 	struct transaction *tran;
@@ -105,7 +112,7 @@ struct rffs_log {
 #define __log_add_tran(log, tran)	\
 	list_add_tail(&(tran)->list, &(log)->l_trans)
 
-#define log_tail_tran(log)	\
+#define __log_tail_tran(log)	\
 	list_entry((log)->l_trans.prev, struct transaction, list)
 
 static inline void log_init(struct rffs_log *log) {
@@ -131,7 +138,7 @@ static inline void log_destroy(struct rffs_log *log) {
 }
 
 static inline void __log_seal(struct rffs_log *log) {
-	struct transaction *tran = log_tail_tran(log);
+	struct transaction *tran = __log_tail_tran(log);
     unsigned int end = L_END(log);
     if (log->l_head == end) {
         PRINT(WARNING "[rffs] nothing to seal: %u-%u-%u\n",

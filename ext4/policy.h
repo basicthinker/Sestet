@@ -9,8 +9,6 @@
 #ifndef RFFS_POLICY_H_
 #define RFFS_POLICY_H_
 
-#include "rffs.h"
-
 struct tran_stat {
 	unsigned long merg_size;
 	unsigned long staleness;
