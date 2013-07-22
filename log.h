@@ -49,13 +49,15 @@ struct log_entry {
     void *data;
 };
 
-#define ent_inval(ent) { (ent).inode_id = ULONG_MAX; }
-#define ent_valid(ent) ((ent).inode_id != ULONG_MAX)
-#define ent_len(ent) ((ent).length & (LE_LEN_SIZE - 1))
-#define set_len(ent, l) ((ent).length &= LE_LEN_MASK, (ent).length += (l))
-#define ent_seq(ent) ((ent).length >> LE_LEN_SHIFT)
-#define add_seq(ent, n) ((ent).length += (n) << LE_LEN_SHIFT)
-#define ent_meta(ent) ((ent).index > LE_MAX_IDX)
+#define ent_inval(ent)		{ (ent).inode_id = ULONG_MAX; }
+#define ent_valid(ent)		((ent).inode_id != ULONG_MAX)
+#define ent_len(ent)		((ent).length & (LE_LEN_SIZE - 1))
+#define set_len(ent, l)		((ent).length &= LE_LEN_MASK, (ent).length += (l))
+#define ent_seq(ent)		((ent).length >> LE_LEN_SHIFT)
+#define add_seq(ent, n)		((ent).length += (n) << LE_LEN_SHIFT)
+#define ent_meta(ent)		((ent).index > LE_MAX_IDX)
+#define is_meta_new(ent)	((ent).index == LE_META_NEW)
+#define is_meta_rm(ent)		((ent).index == LE_META_RM)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;

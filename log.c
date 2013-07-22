@@ -21,12 +21,15 @@
 
 #define entry(i) (entries[(i) & LOG_MASK])
 
-#define SWAP_ENTRY(a, b) do {   \
-  struct log_entry tmp;         \
-  tmp = a;                      \
-  a = b;                        \
-  b = tmp;                      \
-} while(0)
+#define SWAP_ENTRY(a, b) do { \
+        struct log_entry tmp; \
+        tmp = (a); \
+        (a) = (b); \
+        (b) = tmp; } while (0)
+
+#define SWAP_ENTI(i, j) do { \
+        if (likely((i) != (j))) \
+            SWAP_ENTRY(entry(i), entry(j)); } while (0)
 
 #ifdef __KERNEL__
 struct kmem_cache *rffs_tran_cachep;
@@ -49,6 +52,41 @@ static unsigned int stack_top = 0;
     ++stack_top;                \
 } while(0)
 #define stack_pop(elem) do { elem = stack[--stack_top]; } while(0)
+
+#define SEARCH_RANGE(t_ino, b, e) ({ \
+		int i; \
+		for (i = b; i < e; ++i) { \
+			if (entry(i).inode_id == t_ino) break; \
+		} \
+		i; })
+
+static void clear_removal(struct log_entry entries[],
+		int begin, int end, int rm_min) {
+	int rm_b, rm_e;
+	int cur, i;
+
+	BUG_ON(rm_min < begin || rm_min >= end);
+
+	rm_b = rm_e = end;
+	for (cur = end - 1; // init: pos < rm_b
+			cur >= begin && (cur >= rm_min || rm_b < rm_e); --cur) {
+		if (unlikely(!ent_valid(entry(cur)))) continue;
+		if (is_meta_rm(entry(cur))) {
+			--rm_b;
+			SWAP_ENTI(cur, rm_b); // invar: pos <= rm_b
+		} else if (is_meta_new(entry(cur))) {
+			i = SEARCH_RANGE(entry(cur).inode_id, rm_b, rm_e);
+			if (i != rm_e) {
+				--rm_e;
+				SWAP_ENTI(i, rm_e);
+				ent_inval(entry(rm_e));
+				ent_inval(entry(cur));
+			}
+		} else if (SEARCH_RANGE(entry(cur).inode_id, rm_b, rm_e) != rm_e) {
+			ent_inval(entry(cur));
+		}
+	}
+}
 
 static void short_sort(struct log_entry entries[], int l, int r) {
   int i, max, pos;
@@ -120,8 +158,7 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
-static inline int do_flush(handle_t *handle, struct log_entry *ent)
-{
+static inline int do_flush(handle_t *handle, struct log_entry *ent) {
 #ifdef __KERNEL__
 	struct rlog *rl = find_rlog(page_rlog, ent->data);
 
