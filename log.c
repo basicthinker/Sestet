@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/page-flags.h>
+#include <linux/pagemap.h>
 #endif
 #include "log.h"
 
@@ -122,19 +123,26 @@ static inline int do_flush(handle_t *handle, struct log_entry *ent)
 {
 #ifdef __KERNEL__
 	struct rlog *rl = find_rlog(page_rlog, ent->data);
+
+	printk(KERN_INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
+			(long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
+
 	if (ent_valid(*ent) && flush_ops.ent_flush)
 		flush_ops.ent_flush(handle, ent);
-	if (PageChecked(rl->key)) {
+
+	if (PageChecked(rl->key)) { // copied page
 		hlist_del(&rl->hnode);
 		rl->key->mapping = NULL;
 		__free_page(rl->key);
 		rlog_free(rl);
-	} else {
+	} else { // in-mapping page
+		put_page(rl->key);
 		rl->enti = L_NULL;
 	}
-#endif
+#else
 	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
 	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
+#endif
 	return 0;
 }
 

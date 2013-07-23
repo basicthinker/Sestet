@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/swap.h>
 #include <linux/sched.h>
+#include <linux/pagemap.h>
 #include <asm/errno.h>
 
 #include "log.h"
@@ -146,6 +147,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 #ifdef DEBUG_PRP
 	else printk(KERN_DEBUG "[rffs] RP/AP 1: %p - %u - %u\n", rl->key, rl->enti, log->l_head); // else: running page or active page
 #endif
+	get_page(page); // prevents being reclaimed
 	return rl;
 }
 
