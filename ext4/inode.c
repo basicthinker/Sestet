@@ -49,6 +49,7 @@
 #include "ext4_extents.h"
 
 #include "trace-events-ext4.h"
+#include "rffs.h"
 
 #define MPAGE_DA_EXTENT_TAIL 0x01
 
@@ -191,6 +192,8 @@ void ext4_evict_inode(struct inode *inode)
 	trace_ext4_evict_inode(inode);
 
 	ext4_ioend_wait(inode);
+
+	rffs_evict_inode_hook(inode); // RFFS
 
 	if (inode->i_nlink) {
 		truncate_inode_pages(&inode->i_data, 0);

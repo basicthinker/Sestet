@@ -53,40 +53,6 @@ static unsigned int stack_top = 0;
 } while(0)
 #define stack_pop(elem) do { elem = stack[--stack_top]; } while(0)
 
-#define SEARCH_RANGE(t_ino, b, e) ({ \
-		int i; \
-		for (i = b; i < e; ++i) { \
-			if (entry(i).inode_id == t_ino) break; \
-		} \
-		i; })
-
-static void clear_removal(struct log_entry entries[],
-		int begin, int end, int rm_min) {
-	int rm_b, rm_e;
-	int cur, i;
-
-	BUG_ON(rm_min < begin || rm_min >= end);
-
-	rm_b = rm_e = end;
-	for (cur = end - 1; // init: pos < rm_b
-			cur >= begin && (cur >= rm_min || rm_b < rm_e); --cur) {
-		if (unlikely(!ent_valid(entry(cur)))) continue;
-		if (is_meta_rm(entry(cur))) {
-			--rm_b;
-			SWAP_ENTI(cur, rm_b); // invar: pos <= rm_b
-		} else if (is_meta_new(entry(cur))) {
-			i = SEARCH_RANGE(entry(cur).inode_id, rm_b, rm_e);
-			if (i != rm_e) {
-				--rm_e;
-				SWAP_ENTI(i, rm_e);
-				ent_inval(entry(rm_e));
-				ent_inval(entry(cur));
-			}
-		} else if (SEARCH_RANGE(entry(cur).inode_id, rm_b, rm_e) != rm_e) {
-			ent_inval(entry(cur));
-		}
-	}
-}
 
 static void short_sort(struct log_entry entries[], int l, int r) {
   int i, max, pos;
@@ -143,7 +109,7 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	for (i = begin + 1; i < end; ++i) {
 		if (entry(i - 1).inode_id == entry(i).inode_id &&
 				entry(i - 1).index == entry(i).index) {
-			ent_inval(entry(i - 1));
+			ent_inval(entry(i - 1), LE_PAGE_MERGED);
 			if (ent_len(entry(i)) < ent_len(entry(i - 1)))
 				entry(i).length = entry(i - 1).length;
 		}
@@ -159,27 +125,28 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 }
 
 static inline int do_flush(handle_t *handle, struct log_entry *ent) {
+	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
+	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
 #ifdef __KERNEL__
-	struct rlog *rl = find_rlog(page_rlog, ent->data);
-
-	printk(KERN_INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
-			(long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
+	if (ent_meta(*ent)) return 0;
 
 	if (ent_valid(*ent) && flush_ops.ent_flush)
 		flush_ops.ent_flush(handle, ent);
 
-	if (PageChecked(rl->key)) { // copied page
-		hlist_del(&rl->hnode);
-		rl->key->mapping = NULL;
-		__free_page(rl->key);
-		rlog_free(rl);
-	} else { // in-mapping page
-		put_page(rl->key);
-		rl->enti = L_NULL;
+	if (!is_page_evicted(*ent)) {
+		struct rlog *rl = find_rlog(page_rlog, ent->data);
+		BUG_ON(!rl);
+
+		if (PageChecked(rl->key)) { // copied page
+			hlist_del(&rl->hnode);
+			rl->key->mapping = NULL;
+			__free_page(rl->key);
+			rlog_free(rl);
+		} else { // in-mapping page
+			put_page(rl->key);
+			rl->enti = L_NULL;
+		}
 	}
-#else
-	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
-	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
 #endif
 	return 0;
 }

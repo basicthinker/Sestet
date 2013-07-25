@@ -38,9 +38,12 @@ typedef int handle_t;
 #define LE_LEN_SIZE    (PAGE_CACHE_SIZE << 1)
 #define LE_LEN_MASK    (~(LE_LEN_SIZE - 1))
 
+#define LE_PAGE_MERGED	(ULONG_MAX)
+#define LE_PAGE_EVICTED	(ULONG_MAX - 1)
+#define LE_MAX_INO	(ULONG_MAX - 2)
+
 #define LE_META_NEW	(ULONG_MAX)
-#define LE_META_RM	(ULONG_MAX - 1)
-#define LE_MAX_IDX	(ULONG_MAX - 2)
+#define LE_MAX_IDX	(ULONG_MAX - 1)
 
 struct log_entry {
     unsigned long inode_id; // ULONG_MAX indicates invalid entry
@@ -49,15 +52,17 @@ struct log_entry {
     void *data;
 };
 
-#define ent_inval(ent)		{ (ent).inode_id = ULONG_MAX; }
-#define ent_valid(ent)		((ent).inode_id != ULONG_MAX)
+#define ent_inval(ent, flag)	{ (ent).inode_id = flag; }
+#define ent_valid(ent)		((ent).inode_id <= LE_MAX_INO)
+#define is_page_evicted(ent)	((ent).inode_id == LE_PAGE_EVICTED)
+
 #define ent_len(ent)		((ent).length & (LE_LEN_SIZE - 1))
 #define set_len(ent, l)		((ent).length &= LE_LEN_MASK, (ent).length += (l))
 #define ent_seq(ent)		((ent).length >> LE_LEN_SHIFT)
 #define add_seq(ent, n)		((ent).length += (n) << LE_LEN_SHIFT)
+
 #define ent_meta(ent)		((ent).index > LE_MAX_IDX)
 #define is_meta_new(ent)	((ent).index == LE_META_NEW)
-#define is_meta_rm(ent)		((ent).index == LE_META_RM)
 
 static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
 	if (a->inode_id < b->inode_id) return -1;
@@ -73,7 +78,6 @@ struct transaction {
     struct list_head list;
     unsigned int begin;
     unsigned int end;
-    unsigned int l_meta_min; // the min inode removal index
 };
 
 #ifdef __KERNEL__
@@ -83,8 +87,7 @@ extern struct kmem_cache *rffs_tran_cachep;
 #define init_tran(tran) do { \
 		init_stat((tran)->stat); \
 		INIT_LIST_HEAD(&(tran)->list); \
-		(tran)->begin = (tran)->end = 0; \
-		(tran)->l_meta_min = UINT_MAX; } while(0)
+		(tran)->begin = (tran)->end = 0; } while(0)
 
 static inline struct transaction *new_tran(void) {
 	struct transaction *tran;

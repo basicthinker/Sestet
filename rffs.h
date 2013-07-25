@@ -12,15 +12,23 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/kthread.h>
+#include <linux/pagevec.h>
 
 #include "log.h"
+#include "rlog.h"
 
 #define MAX_LOG_NUM 20
 
 struct kiocb;
-struct inovec;
 struct flush_operations;
 extern struct rffs_log rffs_logs[MAX_LOG_NUM];
+
+#define RLOG_HASH_BITS 10
+
+/*
+ * Internal things.
+ * Used by RFFS implementation.
+ */
 
 #ifdef RFFS_DEBUG
 	#define RFFS_TRACE(...) printk(__VA_ARGS__)
@@ -28,7 +36,11 @@ extern struct rffs_log rffs_logs[MAX_LOG_NUM];
 	#define RFFS_TRACE(...)
 #endif
 
-#define RLOG_HASH_BITS 10
+extern struct task_struct *rffs_flusher;
+
+extern struct kmem_cache *rffs_rlog_cachep;
+
+extern struct shashtable *page_rlog;
 
 /* Replacements */
 extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
@@ -56,20 +68,43 @@ static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inod
 			&le, NULL);
 }
 
-static inline void rffs_free_inode_hook(struct inode *inode)
+// Put before freeing in-mapping pages
+static inline void rffs_evict_inode_hook(struct inode *inode)
 {
-	struct log_entry le;
 	struct rffs_log *log = rffs_logs + (unsigned int)(long)inode->i_private;
-	struct transaction *tran;
-	unsigned int ei;
-	le.inode_id = inode->i_ino;
-	le.index = LE_META_RM;
-	log_append(log, &le, &ei);
+    int i;
+    struct pagevec pvec;
+    pgoff_t page_index, next;
+    struct page *page;
+    struct rlog *rl;
 
 	spin_lock(&log->l_lock);
-	tran = __log_tail_tran(log);
-	if (ei < tran->l_meta_min) tran->l_meta_min = ei;
+	for (i = L_END(log) - 1; i >= log->l_begin; --i) {
+		if (!ent_valid(L_ENT(log, i)) || L_ENT(log, i).inode_id != inode->i_ino)
+			continue;
+		ent_inval(L_ENT(log, i), LE_PAGE_EVICTED);
+		if (is_meta_new(L_ENT(log, i))) break;
+	}
 	spin_unlock(&log->l_lock);
+
+	pagevec_init(&pvec, 0);
+	next = 0;
+	while (pagevec_lookup(&pvec, &inode->i_data, next, PAGEVEC_SIZE)) {
+		for (i = 0; i < pagevec_count(&pvec); i++) {
+			page = pvec.pages[i];
+			page_index = page->index;
+			if (page_index > next)
+				next = page_index;
+			next++;
+
+			rl = find_rlog(page_rlog, page);
+			if (rl) {
+				hlist_del(&rl->hnode);
+				rlog_free(rl);
+			}
+		}
+		pagevec_release(&pvec);
+	}
 }
 
 static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)
@@ -78,19 +113,5 @@ static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_ino
 	RFFS_TRACE(KERN_INFO "[rffs] rename_hook: %lu->%lu to %lu\n",
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 }
-
-// Put before freeing in-mapping pages
-
-
-/*
- * Internal things.
- * Used by RFFS implementation.
- */
-
-extern struct task_struct *rffs_flusher;
-
-extern struct kmem_cache *rffs_rlog_cachep;
-
-extern struct shashtable *page_rlog;
 
 #endif /* RFFS_H_ */
