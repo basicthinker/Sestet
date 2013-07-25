@@ -62,8 +62,8 @@ static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inod
 				dir->i_ino, (unsigned long)dir->i_private, new_inode->i_ino);
 	}
 
-	le.inode_id = new_inode->i_ino;
-	le.index = LE_META_NEW;
+	le_set_ino(&le, new_inode->i_ino);
+	le_set_meta(&le);
 	log_append(rffs_logs + (unsigned int)(long)new_inode->i_private,
 			&le, NULL);
 }
@@ -80,10 +80,11 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 
 	spin_lock(&log->l_lock);
 	for (i = L_END(log) - 1; i >= log->l_begin; --i) {
-		if (!ent_valid(L_ENT(log, i)) || L_ENT(log, i).inode_id != inode->i_ino)
+		if (le_inval(L_ENT(log, i)) || le_ino(L_ENT(log, i)) != inode->i_ino)
 			continue;
-		ent_inval(L_ENT(log, i), LE_PAGE_EVICTED);
-		if (is_meta_new(L_ENT(log, i))) break;
+		le_set_inval(L_ENT(log, i));
+		if (le_meta(L_ENT(log, i)))
+			break;
 	}
 	spin_unlock(&log->l_lock);
 

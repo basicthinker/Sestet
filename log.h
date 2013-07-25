@@ -11,6 +11,7 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <asm/types.h>
 #include <asm/errno.h>
 
 #ifdef __KERNEL__
@@ -34,42 +35,61 @@ typedef int handle_t;
 #define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
 #define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
 
-#define LE_LEN_SHIFT   (PAGE_CACHE_SHIFT + 1)
-#define LE_LEN_SIZE    (PAGE_CACHE_SIZE << 1)
-#define LE_LEN_MASK    (~(LE_LEN_SIZE - 1))
+#define LE_PGI_SHIFT	(8)
+#define LE_PGI_MASK		(0xFF)
 
-#define LE_PAGE_MERGED	(ULONG_MAX)
-#define LE_PAGE_EVICTED	(ULONG_MAX - 1)
-#define LE_MAX_INO	(ULONG_MAX - 2)
+#define LE_FLAGS_SHIFT	(PAGE_CACHE_SHIFT + 4)
+#define LE_LEN_SIZE	(PAGE_CACHE_SIZE << 4)
+#define LE_FLAG_MASK	(LE_LEN_SIZE - 1)
+#define LE_LEN_MASK		(~LE_FLAG_MASK)
 
-#define LE_META_NEW	(ULONG_MAX)
-#define LE_MAX_IDX	(ULONG_MAX - 1)
+#define LE_META_SETTER	(1 << LE_FLAGS_SHIFT)
+#define LE_META_CLEAR	(~LE_META_SETTER)
+#define LE_INVAL_SETTER	(LE_META_SETTER << 1)
+#define LE_INVAL_CLEAR	(~LE_INVAL_SETTER)
+#define LE_COW_SETTER	(LE_META_SETTER << 2)
+#define LE_COW_CLEAR	(~LE_COW_SETTER)
 
 struct log_entry {
-    unsigned long inode_id; // ULONG_MAX indicates invalid entry
-    unsigned long index;
-    unsigned long length;
-    void *data;
+    unsigned long le_ino;
+    unsigned long le_pgi; // low bits are version
+    unsigned long le_flags; // low bits are length
+    void *le_ref;
 };
 
-#define ent_inval(ent, flag)	{ (ent).inode_id = flag; }
-#define ent_valid(ent)		((ent).inode_id <= LE_MAX_INO)
-#define is_page_evicted(ent)	((ent).inode_id == LE_PAGE_EVICTED)
+#define le_ino(le)			((le)->le_ino)
+#define le_set_ino(le, ino)	((le)->le_ino = (ino))
+#define le_pgi(le)				((le)->le_pgi >> LE_PGI_SHIFT)
+#define le_init_pgi(le, pgi)	((le)->le_pgi = (pgi) << LE_PGI_SHIFT)
+#define le_ver(le)			((le)->le_pgi & LE_PGI_MASK)
+#define le_add_ver(le, v)	((le)->le_pgi += (v))
+#define le_len(le)			((le)->le_flags & LE_FLAG_MASK)
+#define le_init_len(le, l)	((le)->le_flags = (l))
+#define le_set_len(le, l)	((le)->le_flags = ((le)->le_flags & LE_LEN_MASK) + (l))
 
-#define ent_len(ent)		((ent).length & (LE_LEN_SIZE - 1))
-#define set_len(ent, l)		((ent).length &= LE_LEN_MASK, (ent).length += (l))
-#define ent_seq(ent)		((ent).length >> LE_LEN_SHIFT)
-#define add_seq(ent, n)		((ent).length += (n) << LE_LEN_SHIFT)
+#define le_flags(le)		((le)->le_flags >> LEN_FLAGS_SHIFT)
+#define le_meta(le)			((le)->le_flags & LE_META_SETTER)
+#define le_set_meta(le)		((le)->le_flags |= LE_META_SETTER)
+#define le_set_data(le)		((le)->le_flags &= LE_META_CLEAR)
+#define le_inval(le)		((le)->le_flags & LE_INVAL_SETTER)
+#define le_valid(le)		(!le_inval(le))
+#define le_set_inval(le)	((le)->le_flags |= LE_INVAL_SETTER)
+#define le_set_valid(le)	((le)->le_flags &= LE_INVAL_CLEAR)
+#define le_cow(le)			((le)->le_flags & LE_COW_SETTER)
+#define le_set_cow(le)		((le)->le_flags |= LE_COW_SETTER)
+#define le_clear_cow(le)	((le)->le_flags &= LE_COW_CLEAR)
 
-#define ent_meta(ent)		((ent).index > LE_MAX_IDX)
-#define is_meta_new(ent)	((ent).index == LE_META_NEW)
+#define le_ref(le)			((le)->le_ref)
+#define le_set_ref(le, r)	((le)->le_ref = (r))
 
-static inline int comp_entry(struct log_entry *a, struct log_entry *b) {
-	if (a->inode_id < b->inode_id) return -1;
-	else if (a->inode_id == b->inode_id) {
-	    if (a->index < b->index) return -1;
-	    else if (a->index == b->index) return ent_seq(*a) - ent_seq(*b);
-	    else return 1;
+static inline int le_cmp(struct log_entry *a, struct log_entry *b) {
+	if (le_ino(a) < le_ino(b)) return -1;
+	else if (le_ino(a) == le_ino(b)) {
+	    if (a->le_pgi < b->le_pgi) return -1;
+	    else {
+	    	BUG_ON(a->le_pgi == b->le_pgi);
+	    	return 1;
+	    }
 	} else return 1;
 }
 
@@ -112,7 +132,7 @@ struct rffs_log {
 };
 
 #define L_END(log) (atomic_read(&(log)->l_end))
-#define L_ENT(log, i) ((log)->l_entries[L_INDEX(i)])
+#define L_ENT(log, i) ((log)->l_entries + L_INDEX(i))
 
 #define __log_add_tran(log, tran)	\
 	list_add_tail(&(tran)->list, &(log)->l_trans)
@@ -180,13 +200,13 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
             err = log_flush(log, 1);
         }
         if (err) {
-            PRINT("[Err%d] log failed to append: inode = %lu, block = %lu\n",
-                    err, entry->inode_id, entry->index);
+            PRINT("[Err%d] log failed to append: inode no. = %lu, page index = %lu\n",
+                    err, le_ino(entry), le_pgi(entry));
             spin_unlock(&log->l_lock);
             return err;
         }
     }
-    L_ENT(log, tail) = *entry;
+    *L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
     return 0;
 }

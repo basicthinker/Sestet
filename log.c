@@ -61,7 +61,7 @@ static void short_sort(struct log_entry entries[], int l, int r) {
   for (pos = r; pos > l; --pos) {
     max = pos;
     for (i = l; i < pos; ++i) {
-      if (comp_entry(&entry(i), &entry(max)) > 0) max = i;
+      if (le_cmp(&entry(i), &entry(max)) > 0) max = i;
     }
     SWAP_ENTRY(entry(max), entry(pos));
   }
@@ -73,9 +73,9 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     entry(mi) = entry(l);
     entry(l) = m;
     while (l < r) {
-        while (l < r && comp_entry(&entry(r), &m) >= 0) --r;
+        while (l < r && le_cmp(&entry(r), &m) >= 0) --r;
         entry(l) = entry(r);
-        while (l < r && comp_entry(&entry(l), &m) <= 0) ++l;
+        while (l < r && le_cmp(&entry(l), &m) <= 0) ++l;
         entry(r) = entry(l);
     }
     entry(l) = m;
@@ -107,11 +107,11 @@ int __log_sort(struct rffs_log *log, int begin, int end) {
 static void merge_inval(struct log_entry entries[], int begin, int end) {
 	int i;
 	for (i = begin + 1; i < end; ++i) {
-		if (entry(i - 1).inode_id == entry(i).inode_id &&
-				entry(i - 1).index == entry(i).index) {
-			ent_inval(entry(i - 1), LE_PAGE_MERGED);
-			if (ent_len(entry(i)) < ent_len(entry(i - 1)))
-				entry(i).length = entry(i - 1).length;
+		if (le_ino(&entry(i - 1)) == le_ino(&entry(i)) &&
+				le_ino(&entry(i - 1)) == le_ino(&entry(i))) {
+			le_set_inval(&entry(i - 1));
+			if (le_len(&entry(i)) < le_len(&entry(i - 1)))
+				le_set_len(&entry(i), le_len(&entry(i - 1)));
 		}
 	}
 }
@@ -124,17 +124,17 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
-static inline int do_flush(handle_t *handle, struct log_entry *ent) {
+static inline int do_flush(handle_t *handle, struct log_entry *le) {
 	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
-	        (long int)ent->inode_id, ent->index, ent_seq(*ent), ent_len(*ent));
+	        (long int)le_ino(le), le_pgi(le), le_ver(le), le_len(le));
 #ifdef __KERNEL__
-	if (ent_meta(*ent)) return 0;
+	if (le_meta(le)) return 0;
 
-	if (ent_valid(*ent) && flush_ops.ent_flush)
-		flush_ops.ent_flush(handle, ent);
+	if (le_valid(le) && flush_ops.ent_flush)
+		flush_ops.ent_flush(handle, le);
 
-	if (!is_page_evicted(*ent)) {
-		struct rlog *rl = find_rlog(page_rlog, ent->data);
+	if (!le_cow(le)) {
+		struct rlog *rl = find_rlog(page_rlog, le_ref(le));
 		BUG_ON(!rl);
 
 		if (PageChecked(rl->key)) { // copied page
@@ -199,11 +199,11 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
-    while (!ent_valid(entry(begin))) {
+    while (le_inval(&entry(begin))) {
         do_flush(NULL, &entry(begin)); // only clears page/rlog if necessary
         ++begin;
     }
-    sb = ((struct page *)entry(begin).data)->mapping->host->i_sb;
+    sb = ((struct page *)le_ref(&entry(begin)))->mapping->host->i_sb;
     handle = do_trans_begin(end - begin, sb);
 #else
     handle = do_trans_begin(end - begin, NULL);

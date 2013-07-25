@@ -129,7 +129,7 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		nrl = rlog_malloc();
 		nrl->key = cpage;
 		nrl->enti = rl->enti;
-		L_ENT(log, nrl->enti).data = cpage;
+		le_set_ref(L_ENT(log, nrl->enti), cpage);
 
 		SetPageChecked(cpage); // indicates out of page cache
 		add_rlog(page_rlog, nrl);
@@ -155,7 +155,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 	if (rl->enti != L_NULL && L_NG(log->l_head, rl->enti)) { // active page
 		struct transaction *tran = __log_tail_tran(log);
-		set_len(L_ENT(log, rl->enti), offset + copied);
+		le_set_len(L_ENT(log, rl->enti), offset + copied);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl->key, rl->enti, log->l_head);
 #endif
@@ -163,25 +163,25 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
 				tran->stat.merg_size, tran->stat.latency);
 	} else {
-		unsigned int ei, es;
-		struct log_entry ent;
+		unsigned int ei, pgv;
+		struct log_entry le;
 		struct transaction *tran;
 
-		ent.inode_id = host->i_ino;
-		ent.index = ((struct page *)rl->key)->index;
-		ent.length = offset + copied; // seq = 0
-		ent.data = rl->key;
+		le_set_ino(&le, host->i_ino);
+		le_init_pgi(&le, rl->key->index);
+		le_init_len(&le, offset + copied);
+		le_set_ref(&le, rl->key);
 		if (rl->enti != L_NULL) { // COW page
-			es = ent_seq(L_ENT(log, rl->enti));
-			add_seq(ent, es + 1);
+			pgv = le_ver(L_ENT(log, rl->enti));
+			le_add_ver(&le, pgv + 1);
 #ifdef DEBUG_PRP
-			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl->key, es);
+			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl->key, pgv);
 #endif
 		}
 #ifdef DEBUG_PRP
 		else printk(KERN_DEBUG "[rffs] NP/RP 2: %p\n", rl->key);
 #endif
-		err = log_append(log, &ent, &ei);
+		err = log_append(log, &le, &ei);
 		if (unlikely(err)) return err;
 		rl->enti = ei;
 
