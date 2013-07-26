@@ -99,10 +99,7 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 			next++;
 
 			rl = find_rlog(page_rlog, page);
-			if (rl) {
-				hlist_del(&rl->hnode);
-				rlog_free(rl);
-			}
+			if (rl) evict_rlog(rl);
 		}
 		pagevec_release(&pvec);
 	}

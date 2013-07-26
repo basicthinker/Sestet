@@ -108,7 +108,7 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	int i;
 	for (i = begin + 1; i < end; ++i) {
 		if (le_ino(&entry(i - 1)) == le_ino(&entry(i)) &&
-				le_ino(&entry(i - 1)) == le_ino(&entry(i))) {
+				le_pgi(&entry(i - 1)) == le_pgi(&entry(i))) {
 			le_set_inval(&entry(i - 1));
 			if (le_len(&entry(i)) < le_len(&entry(i - 1)))
 				le_set_len(&entry(i), le_len(&entry(i - 1)));
@@ -133,19 +133,10 @@ static inline int do_flush(handle_t *handle, struct log_entry *le) {
 	if (le_valid(le) && flush_ops.ent_flush)
 		flush_ops.ent_flush(handle, le);
 
-	if (!le_cow(le)) {
+	if (le_cow(le) || le_valid(le)) {
 		struct rlog *rl = find_rlog(page_rlog, le_ref(le));
 		BUG_ON(!rl);
-
-		if (PageChecked(rl->key)) { // copied page
-			hlist_del(&rl->hnode);
-			rl->key->mapping = NULL;
-			__free_page(rl->key);
-			rlog_free(rl);
-		} else { // in-mapping page
-			put_page(rl->key);
-			rl->enti = L_NULL;
-		}
+		evict_rlog(rl);
 	}
 #endif
 	return 0;

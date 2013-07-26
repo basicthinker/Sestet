@@ -35,6 +35,8 @@ typedef int handle_t;
 #define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
 #define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
 
+#define LE_INVAL_INO	(ULONG_MAX)
+
 #define LE_PGI_SHIFT	(8)
 #define LE_PGI_MASK		(0xFF)
 
@@ -45,9 +47,7 @@ typedef int handle_t;
 
 #define LE_META_SETTER	(1 << LE_FLAGS_SHIFT)
 #define LE_META_CLEAR	(~LE_META_SETTER)
-#define LE_INVAL_SETTER	(LE_META_SETTER << 1)
-#define LE_INVAL_CLEAR	(~LE_INVAL_SETTER)
-#define LE_COW_SETTER	(LE_META_SETTER << 2)
+#define LE_COW_SETTER	(LE_META_SETTER << 1)
 #define LE_COW_CLEAR	(~LE_COW_SETTER)
 
 struct log_entry {
@@ -59,6 +59,10 @@ struct log_entry {
 
 #define le_ino(le)			((le)->le_ino)
 #define le_set_ino(le, ino)	((le)->le_ino = (ino))
+#define le_inval(le)		(le_ino(le) == LE_INVAL_INO)
+#define le_valid(le)		(!le_inval(le))
+#define le_set_inval(le)	(le_ino(le) = LE_INVAL_INO)
+
 #define le_pgi(le)				((le)->le_pgi >> LE_PGI_SHIFT)
 #define le_init_pgi(le, pgi)	((le)->le_pgi = (pgi) << LE_PGI_SHIFT)
 #define le_ver(le)			((le)->le_pgi & LE_PGI_MASK)
@@ -71,10 +75,6 @@ struct log_entry {
 #define le_meta(le)			((le)->le_flags & LE_META_SETTER)
 #define le_set_meta(le)		((le)->le_flags |= LE_META_SETTER)
 #define le_set_data(le)		((le)->le_flags &= LE_META_CLEAR)
-#define le_inval(le)		((le)->le_flags & LE_INVAL_SETTER)
-#define le_valid(le)		(!le_inval(le))
-#define le_set_inval(le)	((le)->le_flags |= LE_INVAL_SETTER)
-#define le_set_valid(le)	((le)->le_flags &= LE_INVAL_CLEAR)
 #define le_cow(le)			((le)->le_flags & LE_COW_SETTER)
 #define le_set_cow(le)		((le)->le_flags |= LE_COW_SETTER)
 #define le_clear_cow(le)	((le)->le_flags &= LE_COW_CLEAR)

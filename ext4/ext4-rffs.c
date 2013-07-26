@@ -13,7 +13,7 @@ static inline int __rffs_journalled_writepage(handle_t *handle, struct page *pag
 	int ret = 0;
 	int err;
 
-	//ClearPageChecked(page); // done by rffs
+	ClearPageChecked(page);
 	page_bufs = page_buffers(page);
 	BUG_ON(!page_bufs);
 	walk_page_buffers(handle, page_bufs, 0, len, NULL, bget_one);
@@ -115,11 +115,9 @@ static inline int rffs_writepage(handle_t *handle, struct page *page, unsigned i
 		unlock_page(page);
 		return 0;
 	}
-	if (commit_write) {
-		if (PageChecked(page)) page->mapping = NULL; // prevents further dirty operation
+	if (commit_write)
 		/* now mark the buffer_heads as dirty and uptodate */
 		rffs_block_commit_write(inode, page, 0, len);
-	}
 
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
 	return __rffs_journalled_writepage(handle, page, len);

@@ -13,9 +13,9 @@
 #include "shashtable.h"
 
 struct rlog {
-	struct page *key;
-	struct hlist_node hnode;
-	unsigned int enti;
+	struct hlist_node rl_hnode;
+	struct page *rl_page;
+	unsigned int rl_enti;
 };
 
 #define rlog_malloc() \
@@ -24,9 +24,22 @@ struct rlog {
 #define rlog_free(p) (kmem_cache_free(rffs_rlog_cachep, p))
 
 #define add_rlog(sht, rlog) \
-		sht_add_entry(sht, rlog, key, hnode)
+		sht_add_entry(sht, rlog, rl_page, rl_hnode)
 
 #define find_rlog(sht, page) \
-		sht_find_entry(sht, page, struct rlog, key, hnode)
+		sht_find_entry(sht, page, struct rlog, rl_page, rl_hnode)
+
+#define rl_page(rl)	((rl)->rl_page)
+#define rl_assoc_page(rl, page) { \
+		get_page((rl)->rl_page); \
+		(rl)->rl_page = (page); }
+
+#define rl_enti(rl)				((rl)->rl_enti)
+#define rl_set_enti(rl, enti)	((rl)->rl_enti = (enti))
+
+#define evict_rlog(rl) { \
+		hlist_del(&rl->rl_hnode); \
+		put_page((rl)->rl_page); \
+		rlog_free(rl); }
 
 #endif /* RFFS_RLOG_H_ */

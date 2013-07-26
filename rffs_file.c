@@ -82,9 +82,8 @@ void rffs_exit_hook(void)
 	}
 
 	for_each_hlist_safe(page_rlog, sl, hl) {
-		hlist_for_each_entry_safe(rl, pos, tmp, hl, hnode) {
-			hlist_del(&rl->hnode);
-			rlog_free(rl);
+		hlist_for_each_entry_safe(rl, pos, tmp, hl, rl_hnode) {
+			evict_rlog(rl);
 		}
 	}
 	kmem_cache_destroy(rffs_rlog_cachep);
@@ -103,22 +102,23 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 	struct rffs_log *log = rffs_logs + li;
 
 	BUG_ON(li > MAX_LOG_NUM);
-	BUG_ON(PageChecked(page));
 
 	rl = find_rlog(page_rlog, page);
 
 	if (!rl) { // new page
         rl = rlog_malloc();
-        rl->key = page;
-        rl->enti = L_NULL;
+        rl_assoc_page(rl, page);
+        rl_set_enti(rl, L_NULL);
         add_rlog(page_rlog, rl);
 #ifdef DEBUG_PRP
         printk(KERN_DEBUG "[rffs] NP 1: %p\n", rl->key);
 #endif
-	} else if (rl->enti != L_NULL && L_LESS(rl->enti, log->l_head)) { // COW
+	} else if (rl_enti(rl) != L_NULL && L_LESS(rl_enti(rl), log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
 		void *vfrom, *vto;
+		struct log_entry *le;
 		struct rlog* nrl;
+
 		vfrom = kmap_atomic(page, KM_USER0);
 		vto = kmap_atomic(cpage, KM_USER1);
 		copy_page(vto, vfrom);
@@ -127,20 +127,23 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		cpage->mapping = page->mapping; // for retrieval of inode later on
 
 		nrl = rlog_malloc();
-		nrl->key = cpage;
-		nrl->enti = rl->enti;
-		le_set_ref(L_ENT(log, nrl->enti), cpage);
+		rl_assoc_page(nrl, cpage);
+		rl_set_enti(nrl, rl_enti(rl));
 
-		SetPageChecked(cpage); // indicates out of page cache
+		le = L_ENT(log, rl_enti(nrl));
+		le_set_ref(le, cpage);
+		le_set_cow(le);
+
 		add_rlog(page_rlog, nrl);
+
 #ifdef DEBUG_PRP
-		printk(KERN_DEBUG "[rffs] COW 1: %p\n", rl->key);
+		printk(KERN_DEBUG "[rffs] COW 1: %p\n", rl_page(rl));
 #endif
 	}
 #ifdef DEBUG_PRP
-	else printk(KERN_DEBUG "[rffs] RP/AP 1: %p - %u - %u\n", rl->key, rl->enti, log->l_head); // else: running page or active page
+	else printk(KERN_DEBUG "[rffs] RP/AP 1: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
-	get_page(page); // prevents being reclaimed
+
 	return rl;
 }
 
@@ -153,9 +156,9 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 	BUG_ON(li > MAX_LOG_NUM);
 
-	if (rl->enti != L_NULL && L_NG(log->l_head, rl->enti)) { // active page
+	if (rl_enti(rl) != L_NULL && L_NG(log->l_head, rl_enti(rl))) { // active page
 		struct transaction *tran = __log_tail_tran(log);
-		le_set_len(L_ENT(log, rl->enti), offset + copied);
+		le_set_len(L_ENT(log, rl_enti(rl)), offset + copied);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl->key, rl->enti, log->l_head);
 #endif
@@ -168,22 +171,22 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		struct transaction *tran;
 
 		le_set_ino(&le, host->i_ino);
-		le_init_pgi(&le, rl->key->index);
+		le_init_pgi(&le, rl_page(rl)->index);
 		le_init_len(&le, offset + copied);
-		le_set_ref(&le, rl->key);
-		if (rl->enti != L_NULL) { // COW page
-			pgv = le_ver(L_ENT(log, rl->enti));
+		le_set_ref(&le, rl_page(rl));
+		if (rl_enti(rl) != L_NULL) { // COW page
+			pgv = le_ver(L_ENT(log, rl_enti(rl)));
 			le_add_ver(&le, pgv + 1);
 #ifdef DEBUG_PRP
-			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl->key, pgv);
+			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl_page(rl), pgv);
 #endif
 		}
 #ifdef DEBUG_PRP
-		else printk(KERN_DEBUG "[rffs] NP/RP 2: %p\n", rl->key);
+		else printk(KERN_DEBUG "[rffs] NP/RP 2: %p\n", rl_page(rl));
 #endif
 		err = log_append(log, &le, &ei);
 		if (unlikely(err)) return err;
-		rl->enti = ei;
+		rl_set_enti(rl, ei);
 
 		tran = __log_tail_tran(log);
 		on_write_new_page(log, tran->stat, copied);
