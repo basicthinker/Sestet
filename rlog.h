@@ -31,11 +31,16 @@ struct rlog {
 
 #define rl_page(rl)	((rl)->rl_page)
 #define rl_assoc_page(rl, page) { \
-		get_page((rl)->rl_page); \
+		get_page(page); \
 		(rl)->rl_page = (page); }
 
 #define rl_enti(rl)				((rl)->rl_enti)
 #define rl_set_enti(rl, enti)	((rl)->rl_enti = (enti))
+
+#define assoc_rlog(rl, page, enti, sht) { \
+		rl_assoc_page(rl, page); \
+		rl_set_enti(rl, enti); \
+		add_rlog(sht, rl); }
 
 #define evict_rlog(rl) { \
 		hlist_del(&rl->rl_hnode); \

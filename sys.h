@@ -6,8 +6,8 @@
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
-#ifndef SESTET_RFFS_SYS_H_
-#define SESTET_RFFS_SYS_H_
+#ifndef RFFS_SYS_H_
+#define RFFS_SYS_H_
 
 #define UINT_MAX (~0U)
 
@@ -52,4 +52,12 @@
     #define PAGE_CACHE_MASK (~(PAGE_CACHE_SIZE - 1))
 #endif
 
-#endif // SESTET_RFFS_SYS_H_
+#if defined(__KERNEL__) && defined(RFFS_DEBUG)
+	#define RFFS_TRACE(...)		printk(__VA_ARGS__)
+	#define RFFS_BUG_ON(...)	BUG_ON(__VA_ARGS__)
+#else
+	#define RFFS_TRACE(...)
+	#define RFFS_BUG_ON(...)
+#endif
+
+#endif // RFFS_SYS_H_

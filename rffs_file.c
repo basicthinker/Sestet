@@ -107,13 +107,11 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 
 	if (!rl) { // new page
         rl = rlog_malloc();
-        rl_assoc_page(rl, page);
-        rl_set_enti(rl, L_NULL);
-        add_rlog(page_rlog, rl);
+        assoc_rlog(rl, page, L_NULL, page_rlog);
 #ifdef DEBUG_PRP
-        printk(KERN_DEBUG "[rffs] NP 1: %p\n", rl->key);
+        printk(KERN_DEBUG "[rffs] NP 1: %p\n", rl_page(rl));
 #endif
-	} else if (rl_enti(rl) != L_NULL && L_LESS(rl_enti(rl), log->l_head)) { // COW
+	} else if (L_LESS(rl_enti(rl), log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
 		void *vfrom, *vto;
 		struct log_entry *le;
@@ -127,21 +125,18 @@ static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
 		cpage->mapping = page->mapping; // for retrieval of inode later on
 
 		nrl = rlog_malloc();
-		rl_assoc_page(nrl, cpage);
-		rl_set_enti(nrl, rl_enti(rl));
+		assoc_rlog(nrl, cpage, rl_enti(rl), page_rlog);
 
 		le = L_ENT(log, rl_enti(nrl));
 		le_set_ref(le, cpage);
 		le_set_cow(le);
-
-		add_rlog(page_rlog, nrl);
 
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[rffs] COW 1: %p\n", rl_page(rl));
 #endif
 	}
 #ifdef DEBUG_PRP
-	else printk(KERN_DEBUG "[rffs] RP/AP 1: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
+	else printk(KERN_DEBUG "[rffs] AP 1: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
 
 	return rl;
@@ -160,7 +155,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		struct transaction *tran = __log_tail_tran(log);
 		le_set_len(L_ENT(log, rl_enti(rl)), offset + copied);
 #ifdef DEBUG_PRP
-		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl->key, rl->enti, log->l_head);
+		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
 		on_write_old_page(log, tran->stat, copied);
 		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
@@ -182,7 +177,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 #endif
 		}
 #ifdef DEBUG_PRP
-		else printk(KERN_DEBUG "[rffs] NP/RP 2: %p\n", rl_page(rl));
+		else printk(KERN_DEBUG "[rffs] NP 2: %p\n", rl_page(rl));
 #endif
 		err = log_append(log, &le, &ei);
 		if (unlikely(err)) return err;
@@ -259,7 +254,7 @@ again:
 		pagefault_enable();
 		flush_dcache_page(page);
 		RFFS_TRACE(KERN_INFO "[rffs] rffs_perform_write copies from user: "
-				"ino=%lu, idx=%lu, off=%lu, copy=%u\n",
+				"ino=%lu, idx=%lu, off=%lu, copy=%lu\n",
 				page->mapping->host->i_ino, page->index, offset, copied);
 
 		mark_page_accessed(page);

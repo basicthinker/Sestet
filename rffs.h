@@ -18,28 +18,13 @@
 #include "rlog.h"
 
 #define MAX_LOG_NUM 20
+#define RLOG_HASH_BITS 10
 
 struct kiocb;
 struct flush_operations;
 extern struct rffs_log rffs_logs[MAX_LOG_NUM];
-
-#define RLOG_HASH_BITS 10
-
-/*
- * Internal things.
- * Used by RFFS implementation.
- */
-
-#ifdef RFFS_DEBUG
-	#define RFFS_TRACE(...) printk(__VA_ARGS__)
-#else
-	#define RFFS_TRACE(...)
-#endif
-
 extern struct task_struct *rffs_flusher;
-
 extern struct kmem_cache *rffs_rlog_cachep;
-
 extern struct shashtable *page_rlog;
 
 /* Replacements */
