@@ -119,7 +119,7 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 struct flush_operations flush_ops = { NULL, NULL, NULL };
 
 static inline handle_t *do_trans_begin(int nent, void *arg) {
-	if (flush_ops.trans_begin)
+	if (likely(nent > 0 && flush_ops.trans_begin))
 		return flush_ops.trans_begin(nent, arg);
 	else return NULL;
 }
@@ -130,20 +130,24 @@ static inline int do_flush(handle_t *handle, struct log_entry *le) {
 #ifdef __KERNEL__
 	if (le_meta(le)) return 0;
 
-	if (le_valid(le) && flush_ops.ent_flush)
+	if (le_valid(le) && flush_ops.ent_flush) {
+		RFFS_TRACE(KERN_INFO "[rffs] do_flush(): before ent_flush() on inode %lu, page %lu, ver %lu.\n", le_ino(le), le_pgi(le), le_ver(le));
 		flush_ops.ent_flush(handle, le);
+	}
 
 	if (le_cow(le) || le_valid(le)) {
 		struct rlog *rl = find_rlog(page_rlog, le_ref(le));
 		BUG_ON(!rl);
+		RFFS_TRACE(KERN_INFO "[rffs] do_flush(): before evict_rlog() on page %p, entry %u", rl_page(rl), rl_enti(rl));
 		evict_rlog(rl);
 	}
 #endif
+	RFFS_TRACE(KERN_INFO "[rffs] do_flush() exits with COW=%lu, valid=%d.\n", le_cow(le), le_valid(le));
 	return 0;
 }
 
 static inline int do_trans_end(handle_t *handle, void *arg) {
-	if (flush_ops.trans_end) return flush_ops.trans_end(handle, arg);
+	if (likely(handle && flush_ops.trans_end)) return flush_ops.trans_end(handle, arg);
 	else return 0;
 }
 
@@ -190,11 +194,11 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
-    while (le_inval(&entry(begin))) {
+    sb = ((struct page *)le_ref(&entry(begin)))->mapping->host->i_sb;
+    while (begin < end && le_inval(&entry(begin))) {
         do_flush(NULL, &entry(begin)); // only clears page/rlog if necessary
         ++begin;
     }
-    sb = ((struct page *)le_ref(&entry(begin)))->mapping->host->i_sb;
     handle = do_trans_begin(end - begin, sb);
 #else
     handle = do_trans_begin(end - begin, NULL);
@@ -216,7 +220,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
 #endif
 
     spin_lock(&log->l_lock);
-    log->l_begin = end; // assumes no other competitors for flush
+    log->l_begin = end; // assumes a single-thread flusher
     return err;
 }
 

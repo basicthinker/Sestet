@@ -85,11 +85,7 @@ struct log_entry {
 static inline int le_cmp(struct log_entry *a, struct log_entry *b) {
 	if (le_ino(a) < le_ino(b)) return -1;
 	else if (le_ino(a) == le_ino(b)) {
-	    if (a->le_pgi < b->le_pgi) return -1;
-	    else {
-	    	RFFS_BUG_ON(a->le_pgi == b->le_pgi && le_valid(a) && le_valid(b));
-	    	return 1;
-	    }
+	    return a->le_pgi - b->le_pgi;
 	} else return 1;
 }
 
