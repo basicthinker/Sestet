@@ -108,8 +108,13 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 	int i;
 	for (i = begin + 1; i < end; ++i) {
 		if (le_ino(&entry(i - 1)) == le_ino(&entry(i)) &&
-				le_pgi(&entry(i - 1)) == le_pgi(&entry(i))) {
+				le_pgi(&entry(i - 1)) == le_pgi(&entry(i)) &&
+				!le_meta(&entry(i - 1))) {
+
+			RFFS_TRACE(INFO "[rffs] merge_inval() invalidates entry: "
+					LE_DUMP(&entry(i - 1)));
 			le_set_inval(&entry(i - 1));
+
 			if (le_len(&entry(i)) < le_len(&entry(i - 1)))
 				le_set_len(&entry(i), le_len(&entry(i - 1)));
 		}
@@ -125,24 +130,21 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 }
 
 static inline int do_flush(handle_t *handle, struct log_entry *le) {
-	PRINT(INFO "[rffs]\t%ld\t%lu\t%lu\t%lu\n",
-	        (long int)le_ino(le), le_pgi(le), le_ver(le), le_len(le));
+	PRINT(INFO "[rffs] do_flush() begins on entry: " LE_DUMP(le));
 #ifdef __KERNEL__
 	if (le_meta(le)) return 0;
 
 	if (le_valid(le) && flush_ops.ent_flush) {
-		RFFS_TRACE(KERN_INFO "[rffs] do_flush(): before ent_flush() on inode %lu, page %lu, ver %lu.\n", le_ino(le), le_pgi(le), le_ver(le));
+		RFFS_TRACE(KERN_INFO "[rffs] do_flush() flushes page: " LE_DUMP_PAGE(le));
 		flush_ops.ent_flush(handle, le);
 	}
 
 	if (le_cow(le) || le_valid(le)) {
-		struct rlog *rl = find_rlog(page_rlog, le_ref(le));
+		struct rlog *rl = find_rlog(page_rlog, le_page(le));
 		BUG_ON(!rl);
-		RFFS_TRACE(KERN_INFO "[rffs] do_flush(): before evict_rlog() on page %p, entry %u", rl_page(rl), rl_enti(rl));
 		evict_rlog(rl);
 	}
 #endif
-	RFFS_TRACE(KERN_INFO "[rffs] do_flush() exits with COW=%lu, valid=%d.\n", le_cow(le), le_valid(le));
 	return 0;
 }
 
@@ -194,16 +196,20 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
     merge_inval(entries, begin, end);
 #ifdef __KERNEL__
-    sb = ((struct page *)le_ref(&entry(begin)))->mapping->host->i_sb;
-    while (begin < end && le_inval(&entry(begin))) {
+    while (L_LESS(begin, end) &&
+    		(le_inval(&entry(begin)) || le_meta(&entry(begin)))) {
         do_flush(NULL, &entry(begin)); // only clears page/rlog if necessary
         ++begin;
     }
+    if (unlikely(begin == end)) goto out;
+
+    RFFS_TRACE(KERN_DEBUG "[rffs-debug] get sb from page: " LE_DUMP_PAGE(&entry(begin)));
+    sb = le_page(&entry(begin))->mapping->host->i_sb;
     handle = do_trans_begin(end - begin, sb);
 #else
     handle = do_trans_begin(end - begin, NULL);
 #endif
-    for (i = begin; i < end; ++i) {
+    for (i = begin; L_LESS(i, end); ++i) {
         err = do_flush(handle, &entry(i));
         if (unlikely(err)) {
             log->l_begin = i;
@@ -219,6 +225,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     err = do_trans_end(handle, NULL);
 #endif
 
+out:
     spin_lock(&log->l_lock);
     log->l_begin = end; // assumes a single-thread flusher
     return err;

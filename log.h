@@ -31,7 +31,7 @@ typedef int handle_t;
 #define L_INDEX(p) ((p) & LOG_MASK)
 #define L_NULL  LOG_LEN
 
-#define L_DIST(a, b) ((a) <= (b) ? (b) - (a) : UINT_MAX - (a) + (b) + 1)
+#define L_DIST(a, b) ((unsigned int)((int)(b) - (int)(a)))
 #define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
 #define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
 
@@ -61,17 +61,17 @@ struct log_entry {
 #define le_set_ino(le, ino)	((le)->le_ino = (ino))
 #define le_inval(le)		(le_ino(le) == LE_INVAL_INO)
 #define le_valid(le)		(!le_inval(le))
-#define le_set_inval(le)	(le_ino(le) = LE_INVAL_INO)
+#define le_set_inval(le)	(le_set_ino(le, LE_INVAL_INO))
 
 #define le_pgi(le)				((le)->le_pgi >> LE_PGI_SHIFT)
-#define le_init_pgi(le, pgi)	((le)->le_pgi = (pgi) << LE_PGI_SHIFT)
+#define le_init_pgi(le, pgi)	((le)->le_pgi = ((pgi) << LE_PGI_SHIFT) + 1)
 #define le_ver(le)			((le)->le_pgi & LE_PGI_MASK)
-#define le_add_ver(le, v)	((le)->le_pgi += (v))
+#define le_set_ver(le, v)	((le)->le_pgi += (v) - le_ver(le))
 #define le_len(le)			((le)->le_flags & LE_FLAG_MASK)
 #define le_init_len(le, l)	((le)->le_flags = (l))
 #define le_set_len(le, l)	((le)->le_flags = ((le)->le_flags & LE_LEN_MASK) + (l))
 
-#define le_flags(le)		((le)->le_flags >> LEN_FLAGS_SHIFT)
+#define le_flags(le)		((le)->le_flags >> LE_FLAGS_SHIFT)
 #define le_meta(le)			((le)->le_flags & LE_META_SETTER)
 #define le_set_meta(le)		((le)->le_flags |= LE_META_SETTER)
 #define le_set_data(le)		((le)->le_flags &= LE_META_CLEAR)
@@ -79,8 +79,17 @@ struct log_entry {
 #define le_set_cow(le)		((le)->le_flags |= LE_COW_SETTER)
 #define le_clear_cow(le)	((le)->le_flags &= LE_COW_CLEAR)
 
-#define le_ref(le)			((le)->le_ref)
+#define le_page(le)			((struct page *)(le)->le_ref)
 #define le_set_ref(le, r)	((le)->le_ref = (r))
+
+#define LE_INITIALIZER	{ 0, 0, 0, NULL }
+
+#define LE_DUMP(le)	"ino=%ld, pgi=%lu, ver=%lu, page=%p, len=%lu, flags=%lu\n", \
+		le_ino(le), le_pgi(le), le_ver(le), le_page(le), le_len(le), le_flags(le)
+
+#define LE_DUMP_PAGE(le)	"ino=%ld, mapping=%p, index=%lu, page=%p\n", \
+		le_page(le)->mapping && le_page(le)->mapping->host ? le_page(le)->mapping->host->i_ino : LE_INVAL_INO, \
+		le_page(le)->mapping, le_page(le)->index, le_page(le)
 
 static inline int le_cmp(struct log_entry *a, struct log_entry *b) {
 	if (le_ino(a) < le_ino(b)) return -1;
@@ -204,6 +213,7 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     }
     *L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
+    RFFS_TRACE(INFO "[rffs] log_append() of entry: " LE_DUMP(entry));
     return 0;
 }
 

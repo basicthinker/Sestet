@@ -37,13 +37,19 @@ struct rlog {
 #define rl_enti(rl)				((rl)->rl_enti)
 #define rl_set_enti(rl, enti)	((rl)->rl_enti = (enti))
 
+#define RL_DUMP(rl) "ino=%lu, mapping=%p, index=%lu, page=%p, enti=%d", \
+		rl_page(rl)->mapping && rl_page(rl)->mapping->host ? rl_page(rl)->mapping->host->i_ino : LE_INVAL_INO, \
+		rl_page(rl)->mapping, rl_page(rl)->index, rl_page(rl), rl_enti(rl)
+
 #define assoc_rlog(rl, page, enti, sht) { \
 		rl_assoc_page(rl, page); \
 		rl_set_enti(rl, enti); \
+		RFFS_TRACE(INFO "[rffs] assoc_rlog(): " RL_DUMP(rl)); \
 		add_rlog(sht, rl); }
 
 #define evict_rlog(rl) { \
 		hlist_del(&rl->rl_hnode); \
+		RFFS_TRACE(INFO "[rffs] evict_rlog(): " RL_DUMP(rl)); \
 		put_page((rl)->rl_page); \
 		rlog_free(rl); }
 

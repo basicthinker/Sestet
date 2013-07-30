@@ -37,39 +37,46 @@ extern int rffs_sync_file(struct file *file, int datasync);
 extern int rffs_init_hook(const struct flush_operations *fops);
 extern void rffs_exit_hook(void);
 
-static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode)
+static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode, int mode)
 {
-	struct log_entry le;
-
 	if (dir) {
 		new_inode->i_private = dir->i_private;
-		RFFS_TRACE(KERN_INFO "[rffs] new_inode_hook: %lu->%lu to %lu\n",
-				dir->i_ino, (unsigned long)dir->i_private, new_inode->i_ino);
+		RFFS_TRACE(KERN_INFO "[rffs] new_inode_hook(): dir_ino=%lu, new_ino=%lu, log(%lu)\n",
+				dir->i_ino, new_inode->i_ino, (unsigned long)dir->i_private);
 	}
 
-	le_set_ino(&le, new_inode->i_ino);
-	le_set_meta(&le);
-	log_append(rffs_logs + (unsigned int)(long)new_inode->i_private,
-			&le, NULL);
+	if (S_ISREG(mode)) {
+		struct log_entry le = LE_INITIALIZER;
+		le_set_ino(&le, new_inode->i_ino);
+		le_set_meta(&le);
+		log_append(rffs_logs + (unsigned int)(long)new_inode->i_private,
+				&le, NULL);
+	}
 }
 
 // Put before freeing in-mapping pages
 static inline void rffs_evict_inode_hook(struct inode *inode)
 {
 	struct rffs_log *log = rffs_logs + (unsigned int)(long)inode->i_private;
-    int i;
-    struct pagevec pvec;
-    pgoff_t page_index, next;
-    struct page *page;
-    struct rlog *rl;
+	unsigned int i;
+	struct pagevec pvec;
+	pgoff_t page_index, next;
+	struct page *page;
+	struct rlog *rl;
 
+	RFFS_TRACE(KERN_INFO "[rffs] rffs_evict_inode_hook() for ino=%lu, from=%u, down to=%u\n",
+			inode->i_ino, L_END(log) - 1, log->l_begin);
 	spin_lock(&log->l_lock);
-	for (i = L_END(log) - 1; i >= log->l_begin; --i) {
-		if (le_inval(L_ENT(log, i)) || le_ino(L_ENT(log, i)) != inode->i_ino)
+	for (i = L_END(log) - 1;
+			L_NG(log->l_begin, i); --i) {
+		struct log_entry *le = L_ENT(log, i);
+		if (le_inval(le) || le_ino(le) != inode->i_ino)
 			continue;
-		le_set_inval(L_ENT(log, i));
-		if (le_meta(L_ENT(log, i)))
+		le_set_inval(le);
+		if (le_meta(le)) {
+			RFFS_TRACE(KERN_INFO "[rffs] rffs_evict_inode_hook() breaks at %u\n", i);
 			break;
+		}
 	}
 	spin_unlock(&log->l_lock);
 
@@ -93,7 +100,7 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)
 {
 	old_inode->i_private = new_dir->i_private;
-	RFFS_TRACE(KERN_INFO "[rffs] rename_hook: %lu->%lu to %lu\n",
+	RFFS_TRACE(KERN_INFO "[rffs] rename_hook(): %lu->%lu to %lu\n",
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 }
 

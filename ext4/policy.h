@@ -31,6 +31,8 @@ struct tran_stat {
 #define on_write_old_page(logp, tran_stat, size) {	\
 	tran_stat.merg_size += size;	\
 	tran_stat.staleness += size;	\
+	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
 	if (tran_stat.staleness >= (2 * num_pages * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * num_pages)	\
@@ -40,6 +42,8 @@ struct tran_stat {
 
 #define on_write_new_page(logp, tran_stat, size) {	\
 	tran_stat.staleness += size;	\
+	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
 	if (tran_stat.staleness >= (2 * num_pages * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * num_pages)	\

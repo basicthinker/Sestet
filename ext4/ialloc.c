@@ -834,8 +834,6 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, int mode,
 	ei = EXT4_I(inode);
 	sbi = EXT4_SB(sb);
 
-	rffs_new_inode_hook(dir, inode);
-
 	if (!goal)
 		goal = sbi->s_inode_goal;
 
@@ -1075,6 +1073,8 @@ got:
 
 	ext4_debug("allocating inode %lu\n", inode->i_ino);
 	trace_ext4_allocate_inode(inode, dir, mode);
+
+	rffs_new_inode_hook(dir, inode, mode); // RFFS
 	goto really_out;
 fail:
 	ext4_std_error(sb, err);

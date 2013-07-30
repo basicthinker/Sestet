@@ -158,11 +158,9 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
 		on_write_old_page(log, tran->stat, copied);
-		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write old:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
-				tran->stat.merg_size, tran->stat.latency);
 	} else {
 		unsigned int ei, pgv;
-		struct log_entry le;
+		struct log_entry le = LE_INITIALIZER;
 		struct transaction *tran;
 
 		le_set_ino(&le, host->i_ino);
@@ -171,7 +169,7 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 		le_set_ref(&le, rl_page(rl));
 		if (rl_enti(rl) != L_NULL) { // COW page
 			pgv = le_ver(L_ENT(log, rl_enti(rl)));
-			le_add_ver(&le, pgv + 1);
+			le_set_ver(&le, pgv + 1);
 #ifdef DEBUG_PRP
 			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl_page(rl), pgv);
 #endif
@@ -185,8 +183,6 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 
 		tran = __log_tail_tran(log);
 		on_write_new_page(log, tran->stat, copied);
-		RFFS_TRACE(KERN_INFO "[rffs] log(%u) on write new:\t%lu\t%lu\t%lu\n", li, tran->stat.staleness,
-				tran->stat.merg_size, tran->stat.latency);
 	}
 	return err;
 }
@@ -253,9 +249,6 @@ again:
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		pagefault_enable();
 		flush_dcache_page(page);
-		RFFS_TRACE(KERN_INFO "[rffs] rffs_perform_write copies from user: "
-				"ino=%lu, idx=%lu, off=%lu, copy=%lu\n",
-				page->mapping->host->i_ino, page->index, offset, copied);
 
 		mark_page_accessed(page);
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
