@@ -1,0 +1,29 @@
+
+obj-m := btr-rffs.o
+
+btr-rffs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
+	   file-item.o inode-item.o inode-map.o disk-io.o \
+	   transaction.o inode.o file.o tree-defrag.o \
+	   extent_map.o sysfs.o struct-funcs.o xattr.o ordered-data.o \
+	   extent_io.o volumes.o async-thread.o ioctl.o locking.o orphan.o \
+	   export.o tree-log.o acl.o free-space-cache.o zlib.o lzo.o \
+	   compression.o delayed-ref.o relocation.o delayed-inode.o scrub.o
+#	   rffs_file.o log.o ext4-rffs.o
+
+#ccflags-y += -DRFFS_DEBUG
+
+KSRC = /usr/src/linux-source-3.0.31
+
+default:
+	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` modules
+
+clean:
+	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` clean
+
+install:
+	sudo insmod $(KSRC)/lib/zlib_deflate/zlib_deflate.ko
+	sudo insmod $(KSRC)/lib/libcrc32c.ko
+	sudo insmod btr-rffs.ko
+
+uninstall:
+	sudo rmmod btr-rffs libcrc32c zlib_deflate
