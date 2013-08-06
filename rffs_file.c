@@ -94,101 +94,8 @@ void rffs_exit_hook(void)
 	kmem_cache_destroy(rffs_tran_cachep);
 }
 
-static inline struct rlog *rffs_try_assoc_rlog(struct inode *host,
-		struct page* page)
-{
-	struct rlog *rl;
-	unsigned int li = (unsigned int)(long)host->i_private;
-	struct rffs_log *log = rffs_logs + li;
-
-	BUG_ON(li > MAX_LOG_NUM);
-
-	rl = find_rlog(page_rlog, page);
-
-	if (!rl) { // new page
-        rl = rlog_malloc();
-        assoc_rlog(rl, page, L_NULL, page_rlog);
-#ifdef DEBUG_PRP
-        printk(KERN_DEBUG "[rffs] NP 1: %p\n", rl_page(rl));
-#endif
-	} else if (L_LESS(rl_enti(rl), log->l_head)) { // COW
-		struct page *cpage = page_cache_alloc_cold(&host->i_data);
-		void *vfrom, *vto;
-		struct log_entry *le;
-		struct rlog* nrl;
-
-		vfrom = kmap_atomic(page, KM_USER0);
-		vto = kmap_atomic(cpage, KM_USER1);
-		copy_page(vto, vfrom);
-		kunmap_atomic(vfrom, KM_USER0);
-		kunmap_atomic(vto, KM_USER1);
-		cpage->mapping = page->mapping; // for retrieval of inode later on
-
-		nrl = rlog_malloc();
-		assoc_rlog(nrl, cpage, rl_enti(rl), page_rlog);
-
-		le = L_ENT(log, rl_enti(nrl));
-		le_set_ref(le, cpage);
-		le_set_cow(le);
-
-#ifdef DEBUG_PRP
-		printk(KERN_DEBUG "[rffs] COW 1: %p\n", rl_page(rl));
-#endif
-	}
-#ifdef DEBUG_PRP
-	else printk(KERN_DEBUG "[rffs] AP 1: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
-#endif
-
-	return rl;
-}
-
-static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
-		unsigned long offset, unsigned long copied)
-{
-	int err = 0;
-	unsigned int li = (unsigned int)(long)host->i_private;
-	struct rffs_log *log = rffs_logs + li;
-
-	BUG_ON(li > MAX_LOG_NUM);
-
-	if (rl_enti(rl) != L_NULL && L_NG(log->l_head, rl_enti(rl))) { // active page
-		struct transaction *tran = __log_tail_tran(log);
-		le_set_len(L_ENT(log, rl_enti(rl)), offset + copied);
-#ifdef DEBUG_PRP
-		printk(KERN_DEBUG "[rffs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
-#endif
-		on_write_old_page(log, tran->stat, copied);
-	} else {
-		unsigned int ei, pgv;
-		struct log_entry le = LE_INITIALIZER;
-		struct transaction *tran;
-
-		le_set_ino(&le, host->i_ino);
-		le_init_pgi(&le, rl_page(rl)->index);
-		le_init_len(&le, offset + copied);
-		le_set_ref(&le, rl_page(rl));
-		if (rl_enti(rl) != L_NULL) { // COW page
-			pgv = le_ver(L_ENT(log, rl_enti(rl)));
-			le_set_ver(&le, pgv + 1);
-#ifdef DEBUG_PRP
-			printk(KERN_DEBUG "[rffs] COW 2: %p - %d\n", rl_page(rl), pgv);
-#endif
-		}
-#ifdef DEBUG_PRP
-		else printk(KERN_DEBUG "[rffs] NP 2: %p\n", rl_page(rl));
-#endif
-		err = log_append(log, &le, &ei);
-		if (unlikely(err)) return err;
-		rl_set_enti(rl, ei);
-
-		tran = __log_tail_tran(log);
-		on_write_new_page(log, tran->stat, copied);
-	}
-	return err;
-}
-
-
 // mm/filemap.c
+// generic_perform_write
 static ssize_t rffs_perform_write(struct file *file,
 				struct iov_iter *i, loff_t pos)
 {
@@ -243,6 +150,7 @@ again:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
+		// RFFS:
 		if (!re_entry) rl = rffs_try_assoc_rlog(mapping->host, page);
 
 		pagefault_disable();
@@ -277,10 +185,10 @@ again:
 		pos += copied;
 		written += copied;
 
+		// RFFS:
 		rffs_try_append_log(mapping->host, rl, offset, copied);
 
-		//TODO
-		//balance_dirty_pages_ratelimited(mapping);
+//		balance_dirty_pages_ratelimited(mapping);
 
 	} while (iov_iter_count(i));
 
@@ -288,6 +196,7 @@ again:
 }
 
 // mm/filemap.c
+// generic_file_buffered_write
 static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos, loff_t *ppos, size_t count,
 		ssize_t written)
@@ -297,6 +206,7 @@ static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct 
 	struct iov_iter i;
 
 	iov_iter_init(&i, iov, nr_segs, count, written);
+//	status = generic_perform_write(file, &i, pos);
 	status = rffs_perform_write(file, &i, pos);
 
 	if (likely(status >= 0)) {
@@ -308,6 +218,20 @@ static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct 
 }
 
 // mm/filemap.c
+// __generic_file_aio_write
+/**
+ * This function does all the work needed for actually writing data to a
+ * file. It does all basic checks, removes SUID from the file, updates
+ * modification times and calls proper subroutines depending on whether we
+ * do direct IO or a standard buffered write.
+ *
+ * It expects i_mutex to be grabbed unless we work on a block device or similar
+ * object which does not need locking at all.
+ *
+ * This function does *not* take care of syncing data in case of O_SYNC write.
+ * A caller has to handle it. This is mainly due to the fact that we want to
+ * avoid syncing under i_mutex.
+ */
 static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t *ppos)
 {
@@ -348,17 +272,26 @@ static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iov
 	file_update_time(file);
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
-	//if (unlikely(file->f_flags & O_DIRECT)) {
-	//} else {
-	written = rffs_file_buffered_write(iocb, iov, nr_segs, pos, ppos, count,
-			written);
-	//}
+//	if (unlikely(file->f_flags & O_DIRECT)) {
+//		...
+//	} else {
+//		written = generic_file_buffered_write(iocb, iov, nr_segs,
+//				pos, ppos, count, written);
+		written = rffs_file_buffered_write(iocb, iov, nr_segs,
+				pos, ppos, count, written);
+//	}
 out:
 	current->backing_dev_info = NULL;
 	return written ? written : err;
 }
 
 // mm/filemap.c
+// generic_file_aio_write
+/**
+ * This is a wrapper around __generic_file_aio_write() to be used by most
+ * filesystems. It takes care of syncing the file in case of O_SYNC file
+ * and acquires i_mutex as needed.
+ */
 ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos)
 {
@@ -371,18 +304,17 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 	mutex_lock(&inode->i_mutex);
 	blk_start_plug(&plug);
+//	ret = __generic_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
 	ret = __rffs_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
 	mutex_unlock(&inode->i_mutex);
 
-	/*
-	if (ret > 0 || ret == -EIOCBQUEUED) {
-		ssize_t err;
-
-		err = generic_write_sync(file, pos, ret);
-		if (err < 0 && ret > 0)
-			ret = err;
-	}
-	*/
+//	if (ret > 0 || ret == -EIOCBQUEUED) {
+//		ssize_t err;
+//
+//		err = generic_write_sync(file, pos, ret);
+//		if (err < 0 && ret > 0)
+//			ret = err;
+//	}
 	blk_finish_plug(&plug);
 	return ret;
 }
