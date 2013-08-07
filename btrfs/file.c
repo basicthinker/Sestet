@@ -40,6 +40,8 @@
 #include "locking.h"
 #include "compat.h"
 
+#include "rffs.h" // for RFFS
+
 /*
  * when auto defrag is enabled we
  * queue up these defrag structs to remember which
@@ -304,7 +306,8 @@ next_free:
 static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 					 size_t write_bytes,
 					 struct page **prepared_pages,
-					 struct iov_iter *i)
+					 struct iov_iter *i,
+					 struct inode *inode) // for RFFS
 {
 	size_t copied = 0;
 	size_t total_copied = 0;
@@ -315,12 +318,19 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 		size_t count = min_t(size_t,
 				     PAGE_CACHE_SIZE - offset, write_bytes);
 		struct page *page = prepared_pages[pg];
+
+		struct rlog *rl = NULL; // for RFFS
+
 		/*
 		 * Copy data from userspace to the current page
 		 *
 		 * Disable pagefault to avoid recursive lock since
 		 * the pages are already locked
 		 */
+
+		// RFFS:
+		rl = rffs_try_assoc_rlog(inode, page);
+
 		pagefault_disable();
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, count);
 		pagefault_enable();
@@ -343,6 +353,9 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 		iov_iter_advance(i, copied);
 		write_bytes -= copied;
 		total_copied += copied;
+
+		// RFFS:
+		rffs_try_append_log(inode, rl, offset, copied);
 
 		/* Return to btrfs_file_aio_write to fault page */
 		if (unlikely(copied == 0))
@@ -1213,9 +1226,10 @@ static noinline ssize_t __btrfs_buffered_write(struct file *file,
 			break;
 		}
 
+//		copied = btrfs_copy_from_user(pos, num_pages,
+//				write_bytes, pages, i);
 		copied = btrfs_copy_from_user(pos, num_pages,
-					   write_bytes, pages, i);
-
+				write_bytes, pages, i, inode);
 		/*
 		 * if we have trouble faulting in the pages, fall
 		 * back to one page at a time
@@ -1277,56 +1291,56 @@ static noinline ssize_t __btrfs_buffered_write(struct file *file,
 	return num_written ? num_written : ret;
 }
 
-static ssize_t __btrfs_direct_write(struct kiocb *iocb,
-				    const struct iovec *iov,
-				    unsigned long nr_segs, loff_t pos,
-				    loff_t *ppos, size_t count, size_t ocount)
-{
-	struct file *file = iocb->ki_filp;
-	struct inode *inode = fdentry(file)->d_inode;
-	struct iov_iter i;
-	ssize_t written;
-	ssize_t written_buffered;
-	loff_t endbyte;
-	int err;
-
-	written = generic_file_direct_write(iocb, iov, &nr_segs, pos, ppos,
-					    count, ocount);
-
-	/*
-	 * the generic O_DIRECT will update in-memory i_size after the
-	 * DIOs are done.  But our endio handlers that update the on
-	 * disk i_size never update past the in memory i_size.  So we
-	 * need one more update here to catch any additions to the
-	 * file
-	 */
-	if (inode->i_size != BTRFS_I(inode)->disk_i_size) {
-		btrfs_ordered_update_i_size(inode, inode->i_size, NULL);
-		mark_inode_dirty(inode);
-	}
-
-	if (written < 0 || written == count)
-		return written;
-
-	pos += written;
-	count -= written;
-	iov_iter_init(&i, iov, nr_segs, count, written);
-	written_buffered = __btrfs_buffered_write(file, &i, pos);
-	if (written_buffered < 0) {
-		err = written_buffered;
-		goto out;
-	}
-	endbyte = pos + written_buffered - 1;
-	err = filemap_write_and_wait_range(file->f_mapping, pos, endbyte);
-	if (err)
-		goto out;
-	written += written_buffered;
-	*ppos = pos + written_buffered;
-	invalidate_mapping_pages(file->f_mapping, pos >> PAGE_CACHE_SHIFT,
-				 endbyte >> PAGE_CACHE_SHIFT);
-out:
-	return written ? written : err;
-}
+//static ssize_t __btrfs_direct_write(struct kiocb *iocb,
+//				    const struct iovec *iov,
+//				    unsigned long nr_segs, loff_t pos,
+//				    loff_t *ppos, size_t count, size_t ocount)
+//{
+//	struct file *file = iocb->ki_filp;
+//	struct inode *inode = fdentry(file)->d_inode;
+//	struct iov_iter i;
+//	ssize_t written;
+//	ssize_t written_buffered;
+//	loff_t endbyte;
+//	int err;
+//
+//	written = generic_file_direct_write(iocb, iov, &nr_segs, pos, ppos,
+//					    count, ocount);
+//
+//	/*
+//	 * the generic O_DIRECT will update in-memory i_size after the
+//	 * DIOs are done.  But our endio handlers that update the on
+//	 * disk i_size never update past the in memory i_size.  So we
+//	 * need one more update here to catch any additions to the
+//	 * file
+//	 */
+//	if (inode->i_size != BTRFS_I(inode)->disk_i_size) {
+//		btrfs_ordered_update_i_size(inode, inode->i_size, NULL);
+//		mark_inode_dirty(inode);
+//	}
+//
+//	if (written < 0 || written == count)
+//		return written;
+//
+//	pos += written;
+//	count -= written;
+//	iov_iter_init(&i, iov, nr_segs, count, written);
+//	written_buffered = __btrfs_buffered_write(file, &i, pos);
+//	if (written_buffered < 0) {
+//		err = written_buffered;
+//		goto out;
+//	}
+//	endbyte = pos + written_buffered - 1;
+//	err = filemap_write_and_wait_range(file->f_mapping, pos, endbyte);
+//	if (err)
+//		goto out;
+//	written += written_buffered;
+//	*ppos = pos + written_buffered;
+//	invalidate_mapping_pages(file->f_mapping, pos >> PAGE_CACHE_SHIFT,
+//				 endbyte >> PAGE_CACHE_SHIFT);
+//out:
+//	return written ? written : err;
+//}
 
 static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 				    const struct iovec *iov,
@@ -1339,6 +1353,8 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	ssize_t num_written = 0;
 	ssize_t err = 0;
 	size_t count, ocount;
+
+	struct iov_iter i;
 
 	vfs_check_frozen(inode->i_sb, SB_FREEZE_WRITE);
 
@@ -1384,18 +1400,18 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	file_update_time(file);
 	BTRFS_I(inode)->sequence++;
 
-	if (unlikely(file->f_flags & O_DIRECT)) {
-		num_written = __btrfs_direct_write(iocb, iov, nr_segs,
-						   pos, ppos, count, ocount);
-	} else {
-		struct iov_iter i;
+//	if (unlikely(file->f_flags & O_DIRECT)) {
+//		num_written = __btrfs_direct_write(iocb, iov, nr_segs,
+//						   pos, ppos, count, ocount);
+//	} else {
+//		struct iov_iter i;
 
 		iov_iter_init(&i, iov, nr_segs, count, num_written);
 
 		num_written = __btrfs_buffered_write(file, &i, pos);
 		if (num_written > 0)
 			*ppos = pos + num_written;
-	}
+//	}
 
 	mutex_unlock(&inode->i_mutex);
 
@@ -1412,11 +1428,11 @@ static ssize_t btrfs_file_aio_write(struct kiocb *iocb,
 	 * one running right now.
 	 */
 	BTRFS_I(inode)->last_trans = root->fs_info->generation + 1;
-	if (num_written > 0 || num_written == -EIOCBQUEUED) {
-		err = generic_write_sync(file, pos, num_written);
-		if (err < 0 && num_written > 0)
-			num_written = err;
-	}
+//	if (num_written > 0 || num_written == -EIOCBQUEUED) {
+//		err = generic_write_sync(file, pos, num_written);
+//		if (err < 0 && num_written > 0)
+//			num_written = err;
+//	}
 out:
 	current->backing_dev_info = NULL;
 	return num_written ? num_written : err;
