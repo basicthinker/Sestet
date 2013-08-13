@@ -278,10 +278,30 @@ static ssize_t staleness_sum_store(struct rffs_log *log, const char *buf, size_t
     return len;
 }
 
+unsigned long staleness_limit = 16 * PAGE_SIZE;
+
+static ssize_t staleness_limit_show(struct rffs_log *log, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%lu\n", staleness_limit);
+}
+
+static ssize_t staleness_limit_store(struct rffs_log *log, const char *buf, size_t len)
+{
+	unsigned long limit;
+
+	if (rffs_strtoul(buf, &limit))
+		return -EINVAL;
+
+	staleness_limit = limit;
+    return len;
+}
+
 RFFS_RW_LA(staleness_sum);
+RFFS_RW_LA(staleness_limit);
 
 static struct attribute *rffs_log_attrs[] = {
 		RFFS_LA(staleness_sum),
+		RFFS_LA(staleness_limit),
 		NULL,
 };
 

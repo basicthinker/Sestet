@@ -9,6 +9,8 @@
 #ifndef RFFS_POLICY_H_
 #define RFFS_POLICY_H_
 
+extern unsigned long staleness_limit;
+
 struct tran_stat {
 	unsigned long merg_size;
 	unsigned long staleness;
@@ -26,16 +28,14 @@ struct tran_stat {
 #define ls_ratio(tran_stat)	\
 	((float)tran_stat.latency/tran_stat.staleness)
 
-#define NUM_PAGES 8
-
 #define on_write_old_page(logp, tran_stat, size) {	\
 	tran_stat.merg_size += size;	\
 	tran_stat.staleness += size;	\
 	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
 			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
-	if (tran_stat.staleness >= (2 * NUM_PAGES * PAGE_SIZE)) {	\
+	if (tran_stat.staleness >= staleness_limit) {	\
 		log_seal(logp);	\
-		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * NUM_PAGES)	\
+		if (L_DIST(logp->l_begin, logp->l_head) >= 16)	\
 			wake_up_process(rffs_flusher);	\
 	}	\
 }
@@ -44,9 +44,9 @@ struct tran_stat {
 	tran_stat.staleness += size;	\
 	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
 			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
-	if (tran_stat.staleness >= (2 * NUM_PAGES * PAGE_SIZE)) {	\
+	if (tran_stat.staleness >= staleness_limit) {	\
 		log_seal(logp);	\
-		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * NUM_PAGES)	\
+		if (L_DIST(logp->l_begin, logp->l_head) >= 16)	\
 			wake_up_process(rffs_flusher);	\
 	}	\
 	\

@@ -202,5 +202,4 @@ extern ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 extern int rffs_sync_file(struct file *file, int datasync);
 
-
 #endif /* RFFS_H_ */

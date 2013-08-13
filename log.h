@@ -30,8 +30,8 @@ extern struct kset *rffs_kset;
 extern struct kobj_type rffs_la_ktype;
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
-    #define LOG_LEN 8192 // 8k
-    #define LOG_MASK 8191
+    #define LOG_LEN 16384 // 16k * 4KB = 64MB
+    #define LOG_MASK 16383
 #endif
 
 #define L_INDEX(p) ((p) & LOG_MASK)
