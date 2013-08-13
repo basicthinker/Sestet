@@ -11,17 +11,23 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 #include <asm/types.h>
 #include <asm/errno.h>
 
 #ifdef __KERNEL__
 #include <linux/jbd2.h>
+#include <linux/sysfs.h>
 #else
 typedef int handle_t;
 #endif
 
 #include "sys.h"
 #include "policy.h"
+
+extern struct flush_operations flush_ops;
+extern struct kset *rffs_kset;
+extern struct kobj_type rffs_la_ktype;
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
     #define LOG_LEN 8192 // 8k
@@ -134,6 +140,8 @@ struct rffs_log {
     atomic_t l_end;
     struct list_head l_trans;
     spinlock_t l_lock; // to protect the prepared entries
+    struct kobject l_kobj;
+    struct completion l_kobj_unregister;
 };
 
 #define L_END(log) (atomic_read(&(log)->l_end))
@@ -153,6 +161,9 @@ static inline void log_init(struct rffs_log *log) {
     INIT_LIST_HEAD(&log->l_trans);
     spin_lock_init(&log->l_lock);
     __log_add_tran(log, tran);
+
+    log->l_kobj.kset = rffs_kset;
+    init_completion(&log->l_kobj_unregister);
 }
 
 extern int log_flush(struct rffs_log *log, unsigned int nr);
@@ -165,6 +176,9 @@ static inline void log_destroy(struct rffs_log *log) {
 	list_for_each_entry_safe(pos, tmp, &log->l_trans, list) {
 		kmem_cache_free(rffs_tran_cachep, pos);
 	}
+
+	kobject_put(&log->l_kobj);
+	wait_for_completion(&log->l_kobj_unregister);
 }
 
 static inline void __log_seal(struct rffs_log *log) {
@@ -217,6 +231,23 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     return 0;
 }
 
+static inline unsigned long __log_staleness_sum(struct rffs_log *log) {
+    unsigned long sum = 0;
+    struct transaction *tran;
+    list_for_each_entry(tran, &log->l_trans, list) {
+        sum += tran->stat.staleness;
+    }
+    return sum;
+}
+
+static inline unsigned long log_staleness_sum(struct rffs_log *log) {
+    unsigned long sum;
+    spin_lock(&log->l_lock);
+    sum = __log_staleness_sum(log);
+    spin_unlock(&log->l_lock);
+    return sum;
+}
+
 extern int __log_sort(struct rffs_log *log, int begin, int end);
 
 static inline int log_sort(struct rffs_log *log, int begin, int end) {
@@ -233,6 +264,32 @@ struct flush_operations {
 	int (*trans_end)(handle_t *handle, void *data);
 };
 
-extern struct flush_operations flush_ops;
+#ifdef __KERNEL__ /* for sysfs */
+
+struct rffs_log_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct rffs_log *, char *);
+	ssize_t (*store)(struct rffs_log *, const char *, size_t);
+};
+
+#define RFFS_LOG_ATTR(name, mode, show, store) \
+		static struct rffs_log_attr rffs_la_##name = __ATTR(name, mode, show, store)
+#define RFFS_RO_LA(name) RFFS_LOG_ATTR(name, 0444, name##_show, NULL)
+#define RFFS_RW_LA(name) RFFS_LOG_ATTR(name, 0644, name##_show, name##_store)
+
+#define RFFS_LA(name) &rffs_la_##name.attr
+
+static inline int rffs_strtoul(const char *buf, unsigned long *value)
+{
+	char *endp;
+
+	*value = simple_strtoul(skip_spaces(buf), &endp, 0);
+	endp = skip_spaces(endp);
+	if (*endp) return -EINVAL;
+
+	return 0;
+}
+
+#endif
 
 #endif

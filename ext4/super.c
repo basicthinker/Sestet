@@ -4949,10 +4949,6 @@ static int __init ext4_init_fs(void)
 {
 	int i, err;
 
-	err = rffs_init_hook(&rffs_fops);
-	if (err)
-		return err;
-
 	ext4_check_flag_values();
 
 	for (i = 0; i < EXT4_WQ_HASH_SZ; i++) {
@@ -4969,8 +4965,10 @@ static int __init ext4_init_fs(void)
 	ext4_kset = kset_create_and_add("rffs", NULL, fs_kobj);
 	if (!ext4_kset)
 		goto out6;
+	// RFFS:
+	err = rffs_init_hook(&rffs_fops, ext4_kset);
 	ext4_proc_root = proc_mkdir("fs/rffs", NULL);
-	if (!ext4_proc_root)
+	if (err || !ext4_proc_root)
 		goto out5;
 
 	err = ext4_init_feat_adverts();

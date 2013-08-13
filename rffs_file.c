@@ -16,9 +16,8 @@
 #include <linux/pagemap.h>
 #include <asm/errno.h>
 
-#include "rlog.h"
-#include "policy.h"
 #include "rffs.h"
+#include "policy.h"
 
 struct rffs_log rffs_logs[MAX_LOG_NUM];
 static atomic_t num_logs;
@@ -44,7 +43,7 @@ int rffs_flush(void *data)
 	return 0;
 }
 
-int rffs_init_hook(const struct flush_operations *fops)
+int rffs_init_hook(const struct flush_operations *fops, struct kset *kset)
 {
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -54,9 +53,12 @@ int rffs_init_hook(const struct flush_operations *fops)
 		return -ENOMEM;
 
 	sht_init(page_rlog);
+	rffs_kset = kset;
 
 	atomic_set(&num_logs, 1);
 	log_init(&rffs_logs[0]);
+	kobject_init_and_add(&rffs_logs[0].l_kobj, &rffs_la_ktype, NULL,
+	            "log%d", 0);
 
 	if (fops) flush_ops = *fops;
 
@@ -65,7 +67,6 @@ int rffs_init_hook(const struct flush_operations *fops)
 		printk(KERN_ERR "[rffs] kthread_run() failed: %ld\n", PTR_ERR(rffs_flusher));
 		return PTR_ERR(rffs_flusher);
 	}
-
 	return 0;
 }
 

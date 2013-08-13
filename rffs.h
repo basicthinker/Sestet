@@ -29,7 +29,7 @@ extern struct shashtable *page_rlog;
 
 
 /* Hooks */
-extern int rffs_init_hook(const struct flush_operations *fops);
+extern int rffs_init_hook(const struct flush_operations *fops, struct kset *kset);
 extern void rffs_exit_hook(void);
 
 static inline void rffs_new_inode_hook(struct inode *dir, struct inode *new_inode, int mode)

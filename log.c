@@ -238,3 +238,87 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
     spin_unlock(&log->l_lock);
     return ret;
 }
+
+/* Attributes exported to sysfs */
+
+static ssize_t staleness_sum_show(struct rffs_log *log, char *buf)
+{
+	unsigned long sum = log_staleness_sum(log);
+	return snprintf(buf, PAGE_SIZE, "%lu\n", sum);
+}
+
+static ssize_t staleness_sum_store(struct rffs_log *log, const char *buf, size_t len)
+{
+	unsigned long req_sum;
+	int nr = 0;
+	struct transaction *start = NULL;
+	struct transaction *pos;
+
+	if (rffs_strtoul(buf, &req_sum))
+		return -EINVAL;
+
+    spin_lock(&log->l_lock);
+	start = list_prepare_entry(start, &log->l_trans, list);
+	list_for_each_entry_reverse(pos, &log->l_trans, list) {
+		if (req_sum >= pos->stat.staleness) {
+			req_sum -= pos->stat.staleness;
+		} else {
+			nr = 1;
+			break;
+		}
+	}
+	if (pos != start) {
+		if (is_tran_open(pos)) __log_seal(log);
+		list_for_each_entry_continue_reverse(pos, &log->l_trans, list) {
+			++nr;
+		}
+	}
+	nr = __log_flush(log, nr);
+    spin_unlock(&log->l_lock);
+    return len;
+}
+
+RFFS_RW_LA(staleness_sum);
+
+static struct attribute *rffs_log_attrs[] = {
+		RFFS_LA(staleness_sum),
+		NULL,
+};
+
+static ssize_t rffs_la_show(struct kobject *kobj,
+		struct attribute *attr, char *buf)
+{
+	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
+	struct rffs_log_attr *a = container_of(attr, struct rffs_log_attr, attr);
+
+	return a->show ? a->show(log, buf) : 0;
+}
+
+static ssize_t rffs_la_store(struct kobject *kobj,
+		struct attribute *attr, const char *buf, size_t len)
+{
+	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
+	struct rffs_log_attr *a = container_of(attr, struct rffs_log_attr, attr);
+
+	return a->store ? a->store(log, buf, len) : 0;
+}
+
+static void rffs_la_release(struct kobject *kobj)
+{
+	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
+	complete(&log->l_kobj_unregister);
+}
+
+static const struct sysfs_ops rffs_la_ops = {
+	.show	= rffs_la_show,
+	.store	= rffs_la_store,
+};
+
+struct kobj_type rffs_la_ktype = {
+	.default_attrs	= rffs_log_attrs,
+	.sysfs_ops		= &rffs_la_ops,
+	.release		= rffs_la_release,
+};
+
+struct kset *rffs_kset;
+
