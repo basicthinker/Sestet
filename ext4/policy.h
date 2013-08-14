@@ -14,25 +14,25 @@ extern unsigned long staleness_limit;
 struct tran_stat {
 	unsigned long merg_size;
 	unsigned long staleness;
-	unsigned long latency;
+	unsigned long length;
 };
 
 #define init_stat(stat) do {    \
 	stat.merg_size = 0;	\
 	stat.staleness = 0;	\
-	stat.latency = 0;	\
+	stat.length = 0;	\
 } while(0)
 
 #define opt_ratio(tran_stat)	\
 	((float)tran_stat.merg_size/tran_stat.staleness)
 #define ls_ratio(tran_stat)	\
-	((float)tran_stat.latency/tran_stat.staleness)
+	((float)tran_stat.length/tran_stat.staleness)
 
 #define on_write_old_page(logp, tran_stat, size) {	\
 	tran_stat.merg_size += size;	\
 	tran_stat.staleness += size;	\
-	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
-			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
+	printk(KERN_INFO "[rffs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.length); \
 	if (tran_stat.staleness >= staleness_limit) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 16)	\
@@ -41,16 +41,15 @@ struct tran_stat {
 }
 
 #define on_write_new_page(logp, tran_stat, size) {	\
-	tran_stat.staleness += size;	\
-	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
-			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
-	if (tran_stat.staleness >= staleness_limit) {	\
-		log_seal(logp);	\
-		if (L_DIST(logp->l_begin, logp->l_head) >= 16)	\
-			wake_up_process(rffs_flusher);	\
-	}	\
-	\
-	tran_stat.latency += 1;	\
+	tran_stat.staleness += size; \
+	tran_stat.length += 1; \
+	printk(KERN_INFO "[rffs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.length); \
+	if (tran_stat.staleness >= staleness_limit) { \
+		log_seal(logp); \
+		if (L_DIST(logp->l_begin, logp->l_head) >= 16) \
+			wake_up_process(rffs_flusher); \
+	} \
 }
 
 #endif /* RFFS_POLICY_H_ */

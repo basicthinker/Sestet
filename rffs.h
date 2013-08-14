@@ -142,16 +142,50 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 	return err;
 }
 
+// Helper function that iterates pages. Typically not used as a hook.
+static inline void rffs_truncate_pagecache_hook(struct inode *inode, loff_t old, loff_t new)
+{
+	struct address_space *mapping = inode->i_mapping;
+	unsigned int i;
+	struct pagevec pvec;
+	pgoff_t pi, next, end;
+	struct page *page;
+	struct rlog *rl;
+
+	if (old <= new) return;
+
+	next = (new + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	end = old >> PAGE_CACHE_SHIFT;
+
+	pagevec_init(&pvec, 0);
+	while (next <= end &&
+			pagevec_lookup(&pvec, mapping, next, PAGEVEC_SIZE)) {
+		for (i = 0; i < pagevec_count(&pvec); i++) {
+			page = pvec.pages[i];
+			pi = page->index;
+			if (pi > next)
+				next = pi;
+			next++;
+			// TODO: check page reference first
+			rl = find_rlog(page_rlog, page);
+			if (rl) evict_rlog(rl);
+		}
+		pagevec_release(&pvec);
+	}
+}
+
+// Put before invoking truncate_setsize()
+static inline void rffs_truncate_setsize_hook(struct inode *inode, loff_t newsize)
+{
+	loff_t oldsize  = inode->i_size;
+	rffs_truncate_pagecache_hook(inode, oldsize, newsize);
+}
 
 // Put before freeing in-mapping pages
 static inline void rffs_evict_inode_hook(struct inode *inode)
 {
 	struct rffs_log *log = rffs_logs + (unsigned int)(long)inode->i_private;
 	unsigned int i;
-	struct pagevec pvec;
-	pgoff_t page_index, next;
-	struct page *page;
-	struct rlog *rl;
 
 	RFFS_TRACE(KERN_INFO "[rffs] rffs_evict_inode_hook() for ino=%lu, from=%u, down to=%u\n",
 			inode->i_ino, L_END(log) - 1, log->l_begin);
@@ -169,21 +203,7 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 	}
 	spin_unlock(&log->l_lock);
 
-	pagevec_init(&pvec, 0);
-	next = 0;
-	while (pagevec_lookup(&pvec, &inode->i_data, next, PAGEVEC_SIZE)) {
-		for (i = 0; i < pagevec_count(&pvec); i++) {
-			page = pvec.pages[i];
-			page_index = page->index;
-			if (page_index > next)
-				next = page_index;
-			next++;
-
-			rl = find_rlog(page_rlog, page);
-			if (rl) evict_rlog(rl);
-		}
-		pagevec_release(&pvec);
-	}
+	rffs_truncate_pagecache_hook(inode, inode->i_size, 0);
 }
 
 static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)

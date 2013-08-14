@@ -45,6 +45,8 @@ int rffs_flush(void *data)
 
 int rffs_init_hook(const struct flush_operations *fops, struct kset *kset)
 {
+	int err;
+
 	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	rffs_tran_cachep = kmem_cache_create("rffs_tran_cachep", sizeof(struct transaction),
@@ -57,8 +59,10 @@ int rffs_init_hook(const struct flush_operations *fops, struct kset *kset)
 
 	atomic_set(&num_logs, 1);
 	log_init(&rffs_logs[0]);
-	kobject_init_and_add(&rffs_logs[0].l_kobj, &rffs_la_ktype, NULL,
+
+	err = kobject_init_and_add(&rffs_logs[0].l_kobj, &rffs_la_ktype, NULL,
 	            "log%d", 0);
+	if (err) printk(KERN_ERR "[rffs] kobject_init_and_add() failed for log0\n");
 
 	if (fops) flush_ops = *fops;
 
@@ -321,5 +325,7 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 }
 
 int rffs_sync_file(struct file *file, int datasync) {
+	struct inode *inode = file->f_mapping->host;
+	printk("[rffs] rffs_sync_file() on file: ino=%lu\n", inode->i_ino);
 	return 0;
 }

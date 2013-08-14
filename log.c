@@ -250,31 +250,12 @@ static ssize_t staleness_sum_show(struct rffs_log *log, char *buf)
 static ssize_t staleness_sum_store(struct rffs_log *log, const char *buf, size_t len)
 {
 	unsigned long req_sum;
-	int nr = 0;
-	struct transaction *start = NULL;
-	struct transaction *pos;
 
-	if (rffs_strtoul(buf, &req_sum))
+	if (rffs_strtoul(buf, &req_sum) || req_sum != 0)
 		return -EINVAL;
 
-    spin_lock(&log->l_lock);
-	start = list_prepare_entry(start, &log->l_trans, list);
-	list_for_each_entry_reverse(pos, &log->l_trans, list) {
-		if (req_sum >= pos->stat.staleness) {
-			req_sum -= pos->stat.staleness;
-		} else {
-			nr = 1;
-			break;
-		}
-	}
-	if (pos != start) {
-		if (is_tran_open(pos)) __log_seal(log);
-		list_for_each_entry_continue_reverse(pos, &log->l_trans, list) {
-			++nr;
-		}
-	}
-	nr = __log_flush(log, nr);
-    spin_unlock(&log->l_lock);
+	log_seal(log);
+	log_flush(log, UINT_MAX);
     return len;
 }
 
