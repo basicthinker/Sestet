@@ -143,28 +143,24 @@ static inline int rffs_try_append_log(struct inode *host, struct rlog* rl,
 }
 
 // Helper function that iterates pages. Typically not used as a hook.
-static inline void rffs_truncate_pagecache_hook(struct inode *inode, loff_t old, loff_t new)
+static inline void rffs_truncate_pagecache_hook(struct inode *inode, pgoff_t start, pgoff_t end)
 {
 	struct address_space *mapping = inode->i_mapping;
 	unsigned int i;
 	struct pagevec pvec;
-	pgoff_t pi, next, end;
+	pgoff_t pgi, next;
 	struct page *page;
 	struct rlog *rl;
 
-	if (old <= new) return;
-
-	next = (new + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
-	end = old >> PAGE_CACHE_SHIFT;
-
 	pagevec_init(&pvec, 0);
+	next = start;
 	while (next <= end &&
 			pagevec_lookup(&pvec, mapping, next, PAGEVEC_SIZE)) {
 		for (i = 0; i < pagevec_count(&pvec); i++) {
 			page = pvec.pages[i];
-			pi = page->index;
-			if (pi > next)
-				next = pi;
+			pgi = page->index;
+			if (pgi > next)
+				next = pgi;
 			next++;
 			// TODO: check page reference first
 			rl = find_rlog(page_rlog, page);
@@ -178,7 +174,34 @@ static inline void rffs_truncate_pagecache_hook(struct inode *inode, loff_t old,
 static inline void rffs_truncate_setsize_hook(struct inode *inode, loff_t newsize)
 {
 	loff_t oldsize  = inode->i_size;
-	rffs_truncate_pagecache_hook(inode, oldsize, newsize);
+	struct rffs_log *log = rffs_logs + (unsigned int)(long)inode->i_private;
+	pgoff_t start, end;
+	unsigned int i;
+
+	if (oldsize <= newsize) return;
+
+	RFFS_TRACE(KERN_INFO "[rffs] rffs_truncate_setsize_hook() for ino=%lu, oldsize=%lu, newsize=%lu\n",
+			inode->i_ino, (unsigned long)oldsize, (unsigned long)newsize);
+
+	start = (newsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	end = oldsize >> PAGE_CACHE_SHIFT;
+
+	spin_lock(&log->l_lock);
+	for (i = L_END(log) - 1;
+			L_NG(log->l_begin, i); --i) {
+		struct log_entry *le = L_ENT(log, i);
+		if (le_inval(le) || le_ino(le) != inode->i_ino)
+			continue;
+		if (le_meta(le)) {
+			RFFS_TRACE(KERN_INFO "[rffs] rffs_truncate_setsize_hook() breaks at %u\n", i);
+			break;
+		}
+		if (le_pgi(le) >= start && le_pgi(le) <= end)
+			le_set_inval(le);	
+	}
+	spin_unlock(&log->l_lock);
+
+	rffs_truncate_pagecache_hook(inode, start, end);
 }
 
 // Put before freeing in-mapping pages
@@ -189,6 +212,7 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 
 	RFFS_TRACE(KERN_INFO "[rffs] rffs_evict_inode_hook() for ino=%lu, from=%u, down to=%u\n",
 			inode->i_ino, L_END(log) - 1, log->l_begin);
+
 	spin_lock(&log->l_lock);
 	for (i = L_END(log) - 1;
 			L_NG(log->l_begin, i); --i) {
@@ -203,7 +227,7 @@ static inline void rffs_evict_inode_hook(struct inode *inode)
 	}
 	spin_unlock(&log->l_lock);
 
-	rffs_truncate_pagecache_hook(inode, inode->i_size, 0);
+	rffs_truncate_pagecache_hook(inode, 0, ULONG_MAX);
 }
 
 static inline void rffs_rename_hook(struct inode *new_dir, struct inode *old_inode)
