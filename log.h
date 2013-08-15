@@ -227,7 +227,7 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     }
     *L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
-    RFFS_TRACE(INFO "[rffs] log_append() of entry: " LE_DUMP(entry));
+    RFFS_TRACE(INFO "[rffs] log_append(): " LE_DUMP(entry));
     return 0;
 }
 

@@ -1610,6 +1610,7 @@ int do_journal_get_write_access(handle_t *handle,
  */
 static void ext4_truncate_failed_write(struct inode *inode)
 {
+	rffs_truncate_hook(inode, inode->i_size); // RFFS
 	truncate_inode_pages(inode->i_mapping, inode->i_size);
 	ext4_truncate(inode);
 }
@@ -5452,7 +5453,7 @@ int ext4_setattr(struct dentry *dentry, struct iattr *attr)
 
 	if (attr->ia_valid & ATTR_SIZE) {
 		if (attr->ia_size != i_size_read(inode)) {
-			rffs_truncate_setsize_hook(inode, attr->ia_size); // RFFS
+			rffs_truncate_hook(inode, attr->ia_size); // RFFS
 			truncate_setsize(inode, attr->ia_size);
 			ext4_truncate(inode);
 		} else if (ext4_test_inode_flag(inode, EXT4_INODE_EOFBLOCKS))

@@ -130,7 +130,6 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 }
 
 static inline int do_flush(handle_t *handle, struct log_entry *le) {
-	PRINT(INFO "[rffs] do_flush() begins on entry: " LE_DUMP(le));
 #ifdef __KERNEL__
 	if (le_meta(le)) return 0;
 
