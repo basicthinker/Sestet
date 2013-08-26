@@ -4,8 +4,10 @@
 #include "policy_util.h"
 
 #define likely(x)	__builtin_expect((x),1)
+#define unlikely(x)	__builtin_expect((x),0)
 
-#define LEN_BITS 3
+#define LEN_BITS  3
+#define EPSILON  0.000002
 
 // Ported from GSL for verification
 int
@@ -42,11 +44,26 @@ int main(int argc, char *argv[]) {
     double c0, c1;
 
     fh_update_curve(&fh, &p);
+    if (unlikely(fh.seq >> 10)) {
+      flex_line_state stat = FLEX_LINE_STATE_INIT;
+      flex_point *p;
+      for_each_history(p, &fh) {
+        stat.s_x += p->x;
+        stat.s_y += p->y;
+        stat.s_x2 += p->x * p->x;
+        stat.s_xy += p->x * p->y;
+      }
+      stat.slope = ((fh.mask + 1) * stat.s_xy - stat.s_x * stat.s_y) /
+          ((fh.mask + 1) * stat.s_x2 - stat.s_x * stat.s_x);
+      fh_state(&fh) = stat;
+      fh_rewind(&fh);
+    }
+
     gsl_fit_linear((double *)fh.array, 2, (double *)fh.array + 1, 2,
         fh.mask + 1, &c0, &c1);
-    if (fabs(c1 - fh_state(&fh).slope) > 0.0000001)
-      fprintf(stderr, "Mismatch at %lu: GSL - %f \t FlexFS - %f\n",
-          fh.seq, c1, fh_state(&fh).slope); 
+    if (fabs(c1 - fh_state(&fh).slope) > EPSILON)
+      fprintf(stderr, "%s: Mismatch at %lu: GSL = %f \t FlexFS = %f \t Epsilon = %f\n",
+          argv[1], fh.seq, c1, fh_state(&fh).slope, fabs(c1 - fh_state(&fh).slope)); 
     printf("%f\t%f\t%f\t%d\t%f\t%f\n", time, stal, merg, len, ratio,
         fh_state(&fh).slope);
 

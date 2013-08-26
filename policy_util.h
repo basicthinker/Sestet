@@ -26,12 +26,14 @@ struct flex_##name##_history { \
 #define fh_end(fh)	((fh)->seq & (fh)->mask)
 #define fh_len(fh)	(likely((fh)->seq > (fh)->mask) ? (fh)->mask + 1 : (fh)->seq)
 #define fh_state(fh)	((fh)->state)
+#define fh_rewind(fh)	((fh)->seq &= (fh)->mask)
 #define fh_head_item(fh)	((fh)->array[fh_end(fh)])
 
 #define fh_add(fh, v) { \
 		fh_head_item(fh) = *(v); \
 		++(fh)->seq; }
 
+// Used for alignment for a certain number of fh_add()
 #define for_each_history(pos, fh) \
 		for (pos = (fh)->array + (fh)->mask; pos >= (fh)->array; --pos)
 
@@ -83,7 +85,7 @@ FLEX_CREATE_HISTORY_TYPE(curve, flex_point, flex_line_state);
 
 #define fh_update_curve(fh, v) { \
 		fh_state(fh).slope = inc_fit_linear(&fh_head_item(fh), v, \
-				&fh_state(fh), fh_len(fh)); \
+				&fh_state(fh), (fh)->mask + 1); \
 		fh_add(fh, v); }
 
 #endif /* POLICY_UTIL_H_ */
