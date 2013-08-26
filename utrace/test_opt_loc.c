@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
       &time, &stal, &merg, &len, &ratio) == 5) {
     flex_point p = { stal, ratio };
     double c0, c1;
-
+    double pre_slope = fh_state(&fh).slope;
     fh_update_curve(&fh, &p);
     if (unlikely(fh.seq >> 10)) {
       flex_line_state stat = FLEX_LINE_STATE_INIT;
@@ -74,11 +74,13 @@ int main(int argc, char *argv[]) {
         opt = ratio;
         continue;
       }
-      if (c1 > thr_s) continue;
-      if (thr_n) --thr_n;
-      else {
-        loc = stal;
-        opt = ratio;
+      if ((pre_slope > 0 && c1 < 0) || (c1 > 0 && c1 < thr_s)) {
+        fprintf(stderr, "%s: Peak detected: stal=%f pre=%f slope=%f thr=%f\n", argv[1], stal, pre_slope, c1, thr_s);
+        if (thr_n) --thr_n;
+        else {
+          loc = stal;
+          opt = ratio;
+        }
       }
     }
   } // while
@@ -92,7 +94,7 @@ int main(int argc, char *argv[]) {
     char fn[127];
     sprintf(fn, "%s.loc", argv[1]);
     freopen(fn, "w", stdout);
-    printf("%f\t%f\n", loc, opt);
+    printf("%s\t%f\t%f\n", argv[1], loc, opt);
   }
   return 0;
 }
