@@ -26,7 +26,7 @@ struct flex_##name##_history { \
 #define fh_end(fh)	((fh)->seq & (fh)->mask)
 #define fh_len(fh)	(likely((fh)->seq > (fh)->mask) ? (fh)->mask + 1 : (fh)->seq)
 #define fh_state(fh)	((fh)->state)
-#define fh_rewind(fh)	((fh)->seq &= (fh)->mask)
+#define fh_rewind(fh)	((fh)->seq = ((fh)->seq & (fh)->mask) + (fh)->maske + 1)
 #define fh_head_item(fh)	((fh)->array[fh_end(fh)])
 
 #define fh_add(fh, v) { \
@@ -39,15 +39,6 @@ struct flex_##name##_history { \
 
 #define for_each_history_limit(pos, fh, limit) \
 		for (pos = (fh)->array + (limit) - 1; pos >= (fh)->array; --pos)
-
-
-/* For state machine to store latest intervals */
-
-FLEX_CREATE_HISTORY_TYPE(interval, double, double);
-
-#define fh_update_interval(fh, v) { \
-		(fh)->state += *(v) - fh_head_item(fh); \
-		fh_add(fh, v); }
 
 /* For locator to store latest curve points */
 
@@ -87,5 +78,21 @@ FLEX_CREATE_HISTORY_TYPE(curve, flex_point, flex_line_state);
 		fh_state(fh).slope = inc_fit_linear(&fh_head_item(fh), v, \
 				&fh_state(fh), (fh)->mask + 1); \
 		fh_add(fh, v); }
+
+/* For state machine to store latest intervals */
+
+FLEX_CREATE_HISTORY_TYPE(interval, double, double);
+
+#define fh_update_interval(fh, v) { \
+		(fh)->state += *(v) - fh_head_item(fh); \
+		fh_add(fh, v); }
+
+struct flex_touch_state {
+	struct flex_interval_history int_hist;
+	double timer;
+};
+
+#define FLEX_TOUCH_STATE_INIT(LEN_BITS) \
+		{ FLEX_HISTORY_INIT(LEN_BITS, 0.0, 0.0), 0.0 }
 
 #endif /* POLICY_UTIL_H_ */
