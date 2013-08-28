@@ -26,7 +26,7 @@ struct flex_##name##_history { \
 #define fh_end(fh)	((fh)->seq & (fh)->mask)
 #define fh_len(fh)	(likely((fh)->seq > (fh)->mask) ? (fh)->mask + 1 : (fh)->seq)
 #define fh_state(fh)	((fh)->state)
-#define fh_rewind(fh)	((fh)->seq = ((fh)->seq & (fh)->mask) + (fh)->maske + 1)
+#define fh_rewind(fh)	((fh)->seq = ((fh)->seq & (fh)->mask) + (fh)->mask + 1)
 #define fh_head_item(fh)	((fh)->array[fh_end(fh)])
 
 #define fh_add(fh, v) { \

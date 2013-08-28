@@ -6,8 +6,9 @@
 #define likely(x)	__builtin_expect((x),1)
 #define unlikely(x)	__builtin_expect((x),0)
 
-#define LEN_BITS  3
+#define LEN_BITS  4
 #define EPSILON  0.000002
+#define MIN_R 10
 
 // Ported from GSL for verification
 int
@@ -68,7 +69,7 @@ int main(int argc, char *argv[]) {
         fh_state(&fh).slope);
 
     if (loc == 0.0) {
-      if (stal < min_stal) continue;
+      if (stal < min_stal || ratio < MIN_R) continue;
       if (stal > max_stal) {
         loc = stal;
         opt = ratio;
