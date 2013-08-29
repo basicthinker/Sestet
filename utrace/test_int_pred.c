@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
     timeout = transfer(ts, &s, EV_USER, log_int);
     trace_state(s, timeout);
   }
-  printf("%d\t%d\t%f\t%f\n",
+  printf("%s:\t%d\t%d\t%f\t%f\n", argv[1],
       num_conflicts, num_pred, total_len, total_len/num_pred);
   return 0;
 }
