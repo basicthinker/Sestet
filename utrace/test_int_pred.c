@@ -18,13 +18,29 @@ enum state {
   ST_DIS_UP
 };
 
+char *state_name[] = {
+    [ST_CON] = "ST_CON",
+    [ST_DIS] = "ST_DIS",
+    [ST_DIS_DOWN] = "ST_DIS_DOWN",
+    [ST_DIS_UP] = "ST_DIS_UP" };
+
 enum event {
   EV_USER,
   EV_TIMER // either threshold or predicted value passed
 };
 
-static inline double min_time(double a, double b) {
-  return a < b ? a : b;
+char *event_name[] = {
+    [EV_USER] = "EV_USER",
+    [EV_TIMER] = "EV_TIMER" };
+
+#define min_time(a, b) ((a) < (b) ? (a) : (b))
+
+static inline void trace_event(enum event ev, double in, enum state s) {
+  fprintf(stderr, "%s input=%f: %s => ", event_name[ev], in, state_name[s]);
+}
+
+static inline void trace_state(enum state ns, double timeout) {
+  fprintf(stderr, "%s timeout=%f\n", state_name[ns], timeout == INVAL_TIME ? -1 : timeout);
 }
 
 #define update_hist_int(ts, s, in) \
@@ -36,7 +52,8 @@ static inline double min_time(double a, double b) {
 
 #define predict_int(ts) update_timer(ts, ST_DIS)
 //#define threshold(ts) (min_time((ts)[ST_CON].timer * THR_M, THR_INT))
-#define threshold(ts) ((ts)[ST_CON].timer * THR_M)
+#define threshold(ts) \
+    ((ts)[ST_CON].int_hist.seq ? (ts)[ST_CON].timer * THR_M : THR_INT)
 
 int num_conflicts = 0;
 int num_pred=0;
@@ -46,7 +63,6 @@ double total_len = 0.0;
     ++num_pred; \
     total_len += pred; \
     if (pred > in) ++num_conflicts; \
-    printf("%f\t%f\n", pred, in); \
 } while (0)
 
 // Returns timer value
@@ -57,7 +73,7 @@ int main(int argc, char *argv[]) {
   struct flex_touch_state ts[2] = { FLEX_TOUCH_STATE_INIT(LEN_BITS), FLEX_TOUCH_STATE_INIT(LEN_BITS) };
   enum state s;
   double log_int;
-  double time_out;
+  double timeout;
 
   if (argc != 4) {
     fprintf(stderr, "Usage: %s EventLog MultiThreshold IntervalThreshold\n",
@@ -70,20 +86,25 @@ int main(int argc, char *argv[]) {
   THR_INT = atof(argv[3]);
 
   s = ST_CON;
-  time_out = 1;
+  timeout = THR_INT;
   while (scanf("%lf", &log_int) == 1) {
-    while (log_int > time_out) {
-      log_int -= time_out;
-      time_out = transfer(ts, &s, EV_TIMER, log_int + time_out);
+    while (log_int > timeout) {
+      log_int -= timeout;
+      trace_event(EV_TIMER, log_int + timeout, s);
+      timeout = transfer(ts, &s, EV_TIMER, log_int + timeout);
+      trace_state(s, timeout);
     }
-    time_out = transfer(ts, &s, EV_USER, log_int);
+    trace_event(EV_USER, log_int, s);
+    timeout = transfer(ts, &s, EV_USER, log_int);
+    trace_state(s, timeout);
   }
-  printf("Summary:\n%d\t%f\t%f\n", num_conflicts, total_len/num_pred, total_len);
+  printf("%d\t%d\t%f\t%f\n",
+      num_conflicts, num_pred, total_len, total_len/num_pred);
+  return 0;
 }
 
 double transfer(struct flex_touch_state ts[],
     enum state *s, enum event ev, double in) {
-  struct flex_interval_history *fh;
   switch (*s) {
   case ST_CON:
     if (ev == EV_USER) {
