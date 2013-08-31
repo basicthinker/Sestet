@@ -1,16 +1,16 @@
 
-obj-m := brffs.o
+obj-m := badafs.o
 
-brffs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
+badafs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
 	   file-item.o inode-item.o inode-map.o disk-io.o \
 	   transaction.o inode.o file.o tree-defrag.o \
 	   extent_map.o sysfs.o struct-funcs.o xattr.o ordered-data.o \
 	   extent_io.o volumes.o async-thread.o ioctl.o locking.o orphan.o \
 	   export.o tree-log.o acl.o free-space-cache.o zlib.o lzo.o \
 	   compression.o delayed-ref.o relocation.o delayed-inode.o scrub.o \
-	   rffs_file.o log.o btr-rffs.o
+	   ada_file.o ada_log.o btr-adafs.o
 
-#ccflags-y += -DRFFS_DEBUG
+#ccflags-y += -DADAFS_DEBUG
 
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
 

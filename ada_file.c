@@ -1,5 +1,5 @@
 /*
- * rffs_file.c
+ * adafs_file.c
  *
  *  Created on: May 20, 2013
  *      Author: Jinglei Ren <jinglei.ren@stanzax.org>
@@ -16,25 +16,25 @@
 #include <linux/pagemap.h>
 #include <asm/errno.h>
 
-#include "rffs.h"
-#include "policy.h"
+#include "ada_fs.h"
+#include "ada_policy.h"
 
-struct rffs_log rffs_logs[MAX_LOG_NUM];
+struct adafs_log adafs_logs[MAX_LOG_NUM];
 static atomic_t num_logs;
 
-struct kmem_cache *rffs_rlog_cachep;
+struct kmem_cache *adafs_rlog_cachep;
 
 struct shashtable *page_rlog = &(struct shashtable)
 		SHASHTABLE_UNINIT(RLOG_HASH_BITS);
 
-struct task_struct *rffs_flusher;
+struct task_struct *adafs_flusher;
 
-int rffs_flush(void *data)
+int adafs_flush(void *data)
 {
 	int i;
 	while (!kthread_should_stop()) {
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
-			log_flush(rffs_logs + i, UINT_MAX);
+			log_flush(adafs_logs + i, UINT_MAX);
 		}
 
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -43,38 +43,38 @@ int rffs_flush(void *data)
 	return 0;
 }
 
-int rffs_init_hook(const struct flush_operations *fops, struct kset *kset)
+int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 {
 	int err;
 
-	rffs_rlog_cachep = kmem_cache_create("rffs_rlog_cache", sizeof(struct rlog),
+	adafs_rlog_cachep = kmem_cache_create("adafs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
-	rffs_tran_cachep = kmem_cache_create("rffs_tran_cachep", sizeof(struct transaction),
+	adafs_tran_cachep = kmem_cache_create("adafs_tran_cachep", sizeof(struct transaction),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
-	if (!rffs_rlog_cachep || !rffs_tran_cachep)
+	if (!adafs_rlog_cachep || !adafs_tran_cachep)
 		return -ENOMEM;
 
 	sht_init(page_rlog);
-	rffs_kset = kset;
+	adafs_kset = kset;
 
 	atomic_set(&num_logs, 1);
-	log_init(&rffs_logs[0]);
+	log_init(&adafs_logs[0]);
 
-	err = kobject_init_and_add(&rffs_logs[0].l_kobj, &rffs_la_ktype, NULL,
+	err = kobject_init_and_add(&adafs_logs[0].l_kobj, &adafs_la_ktype, NULL,
 	            "log%d", 0);
-	if (err) printk(KERN_ERR "[rffs] kobject_init_and_add() failed for log0\n");
+	if (err) printk(KERN_ERR "[adafs] kobject_init_and_add() failed for log0\n");
 
 	if (fops) flush_ops = *fops;
 
-	rffs_flusher = kthread_run(rffs_flush, NULL, "rffs_flusher");
-	if (IS_ERR(rffs_flusher)) {
-		printk(KERN_ERR "[rffs] kthread_run() failed: %ld\n", PTR_ERR(rffs_flusher));
-		return PTR_ERR(rffs_flusher);
+	adafs_flusher = kthread_run(adafs_flush, NULL, "adafs_flusher");
+	if (IS_ERR(adafs_flusher)) {
+		printk(KERN_ERR "[adafs] kthread_run() failed: %ld\n", PTR_ERR(adafs_flusher));
+		return PTR_ERR(adafs_flusher);
 	}
 	return 0;
 }
 
-void rffs_exit_hook(void)
+void adafs_exit_hook(void)
 {
 	int i;
 	struct sht_list *sl;
@@ -82,8 +82,8 @@ void rffs_exit_hook(void)
 	struct hlist_node *pos, *tmp;
 	struct rlog *rl;
 
-	if (kthread_stop(rffs_flusher) != 0) {
-		printk(KERN_INFO "[rffs] rffs_flusher thread exits unclearly.");
+	if (kthread_stop(adafs_flusher) != 0) {
+		printk(KERN_INFO "[adafs] adafs_flusher thread exits unclearly.");
 	}
 
 	for_each_hlist_safe(page_rlog, sl, hl) {
@@ -91,17 +91,17 @@ void rffs_exit_hook(void)
 			evict_rlog(rl);
 		}
 	}
-	kmem_cache_destroy(rffs_rlog_cachep);
+	kmem_cache_destroy(adafs_rlog_cachep);
 
 	for (i = 0; i < atomic_read(&num_logs); ++i) {
-		log_destroy(rffs_logs + i);
+		log_destroy(adafs_logs + i);
 	}
-	kmem_cache_destroy(rffs_tran_cachep);
+	kmem_cache_destroy(adafs_tran_cachep);
 }
 
 // mm/filemap.c
 // generic_perform_write
-static ssize_t rffs_perform_write(struct file *file,
+static ssize_t adafs_perform_write(struct file *file,
 				struct iov_iter *i, loff_t pos)
 {
 	struct address_space *mapping = file->f_mapping;
@@ -155,8 +155,8 @@ again:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
-		// RFFS:
-		if (!re_entry) rl = rffs_try_assoc_rlog(mapping->host, page);
+		// AdaFS:
+		if (!re_entry) rl = adafs_try_assoc_rlog(mapping->host, page);
 
 		pagefault_disable();
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
@@ -190,8 +190,8 @@ again:
 		pos += copied;
 		written += copied;
 
-		// RFFS:
-		rffs_try_append_log(mapping->host, rl, offset, copied);
+		// AdaFS:
+		adafs_try_append_log(mapping->host, rl, offset, copied);
 
 //		balance_dirty_pages_ratelimited(mapping);
 
@@ -202,7 +202,7 @@ again:
 
 // mm/filemap.c
 // generic_file_buffered_write
-static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
+static inline ssize_t adafs_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos, loff_t *ppos, size_t count,
 		ssize_t written)
 {
@@ -212,7 +212,7 @@ static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct 
 
 	iov_iter_init(&i, iov, nr_segs, count, written);
 //	status = generic_perform_write(file, &i, pos);
-	status = rffs_perform_write(file, &i, pos);
+	status = adafs_perform_write(file, &i, pos);
 
 	if (likely(status >= 0)) {
 		written += status;
@@ -237,7 +237,7 @@ static inline ssize_t rffs_file_buffered_write(struct kiocb *iocb, const struct 
  * A caller has to handle it. This is mainly due to the fact that we want to
  * avoid syncing under i_mutex.
  */
-static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
+static inline ssize_t __adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t *ppos)
 {
 	struct file *file = iocb->ki_filp;
@@ -282,7 +282,7 @@ static inline ssize_t __rffs_file_aio_write(struct kiocb *iocb, const struct iov
 //	} else {
 //		written = generic_file_buffered_write(iocb, iov, nr_segs,
 //				pos, ppos, count, written);
-		written = rffs_file_buffered_write(iocb, iov, nr_segs,
+		written = adafs_file_buffered_write(iocb, iov, nr_segs,
 				pos, ppos, count, written);
 //	}
 out:
@@ -297,7 +297,7 @@ out:
  * filesystems. It takes care of syncing the file in case of O_SYNC file
  * and acquires i_mutex as needed.
  */
-ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
+ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;
@@ -310,7 +310,7 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	mutex_lock(&inode->i_mutex);
 	blk_start_plug(&plug);
 //	ret = __generic_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
-	ret = __rffs_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
+	ret = __adafs_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
 	mutex_unlock(&inode->i_mutex);
 
 //	if (ret > 0 || ret == -EIOCBQUEUED) {
@@ -324,8 +324,8 @@ ssize_t rffs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	return ret;
 }
 
-int rffs_sync_file(struct file *file, int datasync) {
+int adafs_sync_file(struct file *file, int datasync) {
 	struct inode *inode = file->f_mapping->host;
-	printk("[rffs] rffs_sync_file() on file: ino=%lu\n", inode->i_ino);
+	printk("[adafs] adafs_sync_file() on file: ino=%lu\n", inode->i_ino);
 	return 0;
 }

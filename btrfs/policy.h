@@ -6,8 +6,8 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
-#ifndef RFFS_POLICY_H_
-#define RFFS_POLICY_H_
+#ifndef ADAFS_POLICY_H_
+#define ADAFS_POLICY_H_
 
 struct tran_stat {
 	unsigned long merg_size;
@@ -31,26 +31,26 @@ struct tran_stat {
 #define on_write_old_page(logp, tran_stat, size) {	\
 	tran_stat.merg_size += size;	\
 	tran_stat.staleness += size;	\
-	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
-			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
+	ADAFS_TRACE(INFO "[adafs-stat] log(%d) on write old: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - adafs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
 	if (tran_stat.staleness >= (2 * NUM_PAGES * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * NUM_PAGES)	\
-			wake_up_process(rffs_flusher);	\
+			wake_up_process(adafs_flusher);	\
 	}	\
 }
 
 #define on_write_new_page(logp, tran_stat, size) {	\
 	tran_stat.staleness += size;	\
-	RFFS_TRACE(INFO "[rffs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
-			(int)(logp - rffs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
+	ADAFS_TRACE(INFO "[adafs-stat] log(%d) on write new: staleness=%lu, merged=%lu, len=%lu\n", \
+			(int)(logp - adafs_logs), tran_stat.staleness, tran_stat.merg_size, tran_stat.latency); \
 	if (tran_stat.staleness >= (2 * NUM_PAGES * PAGE_SIZE)) {	\
 		log_seal(logp);	\
 		if (L_DIST(logp->l_begin, logp->l_head) >= 2 * NUM_PAGES)	\
-			wake_up_process(rffs_flusher);	\
+			wake_up_process(adafs_flusher);	\
 	}	\
 	\
 	tran_stat.latency += 1;	\
 }
 
-#endif /* RFFS_POLICY_H_ */
+#endif /* ADAFS_POLICY_H_ */

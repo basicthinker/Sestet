@@ -29,7 +29,8 @@
 #include "transaction.h"
 
 /* /sys/fs/btrfs/ entry */
-static struct kset *btrfs_kset;
+//static struct kset *btrfs_kset;
+struct kset *btrfs_kset; // AdaFS uses this in super.c
 
 int btrfs_init_sysfs(void)
 {

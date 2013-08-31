@@ -1,6 +1,6 @@
 //
 //  test.c
-//  sestet-rffs
+//  sestet-adafs
 //
 //  Created by Jinglei Ren on 2/24/13.
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "log.h"
+#include "ada_log.h"
 
 int main(int argc, const char *argv[]) {
-    struct rffs_log log;
+    struct adafs_log log;
     struct log_entry entry;
     int i, j, err, nr_trans, trans_len;
     log_init(&log);

@@ -1,11 +1,11 @@
 ccflags-y += -DADAFS_DEBUG
-KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
+KSRC = /usr/src/linux-source-3.0.31
 
 obj-m += adafs.o
 adafs-objs := inode.o file.o ada_file.o ada_log.o
 
 default:
-	$(MAKE) ARCH=arm CROSS_COMPILE=arm-none-linux-gnueabi- -C $(KSRC) SUBDIRS=`pwd` modules
+	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` modules
 
 clean:
 	$(MAKE) -C $(KSRC) SUBDIRS=`pwd` clean

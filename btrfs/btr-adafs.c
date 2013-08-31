@@ -1,9 +1,9 @@
 #include <linux/fs.h>
 
-#include "btr-rffs.h"
+#include "btr-adafs.h"
 
 ////inode.c
-//static inline int __rffs_journalled_writepage(handle_t *handle, struct page *page,
+//static inline int __adafs_journalled_writepage(handle_t *handle, struct page *page,
 //				       unsigned int len)
 //{
 //	//struct address_space *mapping = page->mapping;
@@ -31,12 +31,12 @@
 //		ret = err;
 //
 //	walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
-//	//ext4_set_inode_state(inode, EXT4_STATE_JDATA); // moved to rffs_writepage()
+//	//ext4_set_inode_state(inode, EXT4_STATE_JDATA); // moved to adafs_writepage()
 //	return ret;
 //}
 //
 ////fs/buffer.c
-//static inline int rffs_block_commit_write(struct inode *inode, struct page *page,
+//static inline int adafs_block_commit_write(struct inode *inode, struct page *page,
 //		unsigned from, unsigned to)
 //{
 //	unsigned block_start, block_end;
@@ -72,7 +72,7 @@
 //}
 //
 ////inode.c
-//static inline int rffs_writepage(handle_t *handle, struct page *page, unsigned int len)
+//static inline int adafs_writepage(handle_t *handle, struct page *page, unsigned int len)
 //{
 //	int commit_write = 0;
 //	//loff_t size;
@@ -116,27 +116,27 @@
 //	}
 //	if (commit_write)
 //		/* now mark the buffer_heads as dirty and uptodate */
-//		rffs_block_commit_write(inode, page, 0, len);
+//		adafs_block_commit_write(inode, page, 0, len);
 //
 //	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
-//	return __rffs_journalled_writepage(handle, page, len);
+//	return __adafs_journalled_writepage(handle, page, len);
 //}
 
-static handle_t *rffs_trans_begin(int npages, void *arg) {
+static handle_t *adafs_trans_begin(int npages, void *arg) {
 	return 0;
 }
 
-static int rffs_ent_flush(handle_t *handle, struct log_entry *ent) {
+static int adafs_ent_flush(handle_t *handle, struct log_entry *ent) {
 	return 0;
 }
 
-static int rffs_trans_end(handle_t *handle, void *arg) {
+static int adafs_trans_end(handle_t *handle, void *arg) {
 	int err = 0;
 	return err;
 }
 
-const struct flush_operations rffs_fops = {
-	.trans_begin = rffs_trans_begin,
-	.ent_flush = rffs_ent_flush,
-	.trans_end = rffs_trans_end,
+const struct flush_operations adafs_fops = {
+	.trans_begin = adafs_trans_begin,
+	.ent_flush = adafs_ent_flush,
+	.trans_end = adafs_trans_end,
 };

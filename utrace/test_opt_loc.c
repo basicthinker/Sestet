@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "policy_util.h"
+#include "ada_policy_util.h"
 
 #define likely(x)	__builtin_expect((x),1)
 #define unlikely(x)	__builtin_expect((x),0)
@@ -22,8 +22,8 @@ int main(int argc, char *argv[]) {
   int thr_n, bits, len;
   double time, stal, merg, ratio;
   double loc, opt;
-  struct flex_curve_history fh = FLEX_HISTORY_INIT(LEN_BITS,
-      FLEX_POINT_ZERO, FLEX_LINE_STATE_ZERO);
+  struct adafs_curve_history fh = ADAFS_HISTORY_INIT(LEN_BITS,
+      ADAFS_POINT_ZERO, ADAFS_LINE_STATE_ZERO);
 
   if (argc != 6) {
     fprintf(stderr, "Usage: %s LogFile MinStal MaxStal SkipPeaks SlopeThreshold\n",
@@ -41,13 +41,13 @@ int main(int argc, char *argv[]) {
   loc = 0.0;
   while(scanf("%lf\t%lf\t%lf\t%d\t%lf", 
       &time, &stal, &merg, &len, &ratio) == 5) {
-    flex_point p = { stal, ratio };
+    adafs_point p = { stal, ratio };
     double c0, c1;
     double pre_slope = fh_state(&fh).slope;
     fh_update_curve(&fh, &p);
     if (unlikely(fh.seq >> 10)) {
-      flex_line_state stat = FLEX_LINE_STATE_INIT;
-      flex_point *p;
+      adafs_line_state stat = ADAFS_LINE_STATE_INIT;
+      adafs_point *p;
       for_each_history(p, &fh) {
         stat.s_x += p->x;
         stat.s_y += p->y;

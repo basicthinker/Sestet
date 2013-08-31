@@ -1,13 +1,13 @@
 //
 //  sys.h
-//  sestet-rffs
+//  sestet-adafs
 //
 //  Created by Jinglei Ren on 2/25/13.
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
-#ifndef RFFS_SYS_H_
-#define RFFS_SYS_H_
+#ifndef ADAFS_SYS_H_
+#define ADAFS_SYS_H_
 
 #define UINT_MAX (~0U)
 
@@ -25,25 +25,25 @@
 
 #ifdef __KERNEL__
     #define PRINT(...) printk(__VA_ARGS__)
-	#define INFO KERN_INFO
-	#define WARNING KERN_WARNING
-	#define ERR KERN_ERR
+    #define INFO KERN_INFO
+    #define WARNING KERN_WARNING
+    #define ERR KERN_ERR
 #else
     #include <stdio.h>
     #define PRINT(...) printf(__VA_ARGS__)
-	#define INFO "INFO - "
-	#define WARNING "WARN - "
-	#define ERR "ERR - "
+    #define INFO "INFO - "
+    #define WARNING "WARN - "
+    #define ERR "ERR - "
 #endif
 
 #ifdef __KERNEL__
 	#include <linux/list.h>
 #else
-	#include "list.h"
+	#include "ulist.h"
 #endif
 
 #ifndef __KERNEL__
-	#include "atomic.h"
+    #include "uatomic.h"
     #define likely(cond) (cond)
     #define unlikely(cond) (cond)
     #define ULONG_MAX (~0UL)
@@ -52,12 +52,12 @@
     #define PAGE_CACHE_MASK (~(PAGE_CACHE_SIZE - 1))
 #endif
 
-#if defined(__KERNEL__) && defined(RFFS_DEBUG)
-	#define RFFS_TRACE(...)		printk(__VA_ARGS__)
-	#define RFFS_BUG_ON(...)	BUG_ON(__VA_ARGS__)
+#if defined(__KERNEL__) && defined(ADAFS_DEBUG)
+    #define ADAFS_TRACE(...)	printk(__VA_ARGS__)
+    #define ADAFS_BUG_ON(...)	BUG_ON(__VA_ARGS__)
 #else
-	#define RFFS_TRACE(...)
-	#define RFFS_BUG_ON(...)
+    #define ADAFS_TRACE(...)
+    #define ADAFS_BUG_ON(...)
 #endif
 
-#endif // RFFS_SYS_H_
+#endif // ADAFS_SYS_H_

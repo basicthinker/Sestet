@@ -65,10 +65,10 @@ int main(int argc, char *argv[]) {
 /*
   Test Runs
   1. Normal run
-    Check dmesg log: 5 rffs flushes, each with NUM_PAGES/2 valid entries.
+    Check dmesg log: 5 adafs flushes, each with NUM_PAGES/2 valid entries.
     Check data after removal: 't'.
   2. Unexpected removal after 5 fsync's (stdout lines)
-    Check dmesg log: should have 2 rffs flushes.
+    Check dmesg log: should have 2 adafs flushes.
     Check data after removal: 'h'. (If we use ext4, this would be 'j'.)
   3. Disable fsync and repeat the above.
 */

@@ -6,8 +6,8 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
-#ifndef RFFS_POLICY_H_
-#define RFFS_POLICY_H_
+#ifndef ADAFS_POLICY_H_
+#define ADAFS_POLICY_H_
 
 struct tran_stat {
 	unsigned long merg_size;
@@ -47,4 +47,4 @@ struct tran_stat {
 	tran_stat.latency += 1; \
 }
 
-#endif /* RFFS_POLICY_H_ */
+#endif /* ADAFS_POLICY_H_ */

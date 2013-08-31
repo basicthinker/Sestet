@@ -346,9 +346,9 @@ static struct kmem_cache *ext4_free_ext_cachep;
 static struct kmem_cache *ext4_groupinfo_caches[NR_GRPINFO_CACHES];
 
 static const char *ext4_groupinfo_slab_names[NR_GRPINFO_CACHES] = {
-	"rffs_groupinfo_1k", "rffs_groupinfo_2k", "rffs_groupinfo_4k",
-	"rffs_groupinfo_8k", "rffs_groupinfo_16k", "rffs_groupinfo_32k",
-	"rffs_groupinfo_64k", "rffs_groupinfo_128k"
+	"adafs_groupinfo_1k", "adafs_groupinfo_2k", "adafs_groupinfo_4k",
+	"adafs_groupinfo_8k", "adafs_groupinfo_16k", "adafs_groupinfo_32k",
+	"adafs_groupinfo_64k", "adafs_groupinfo_128k"
 };
 
 static void ext4_mb_generate_from_pa(struct super_block *sb, void *bitmap,
@@ -2652,7 +2652,7 @@ static struct dentry *debugfs_debug;
 
 static void __init ext4_create_debugfs_entry(void)
 {
-	debugfs_dir = debugfs_create_dir("rffs", NULL);
+	debugfs_dir = debugfs_create_dir("adafs", NULL);
 	if (debugfs_dir)
 		debugfs_debug = debugfs_create_u8("mballoc-debug",
 						  S_IRUGO | S_IWUSR,

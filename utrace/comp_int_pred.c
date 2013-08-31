@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "policy_util.h"
+#include "ada_policy_util.h"
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -30,7 +30,7 @@ static void init_pred(double pred) {
   }
 }
 
-static void update_pred(struct flex_interval_history *int_hist, double in) {
+static void update_pred(struct adafs_interval_history *int_hist, double in) {
   double min = 1024, *pos;
   fh_update_interval(int_hist, &in);
   for_each_history(pos, int_hist) {
@@ -64,7 +64,7 @@ static void print_stat(char *filename) {
 }
 
 int main(int argc, char *argv[]) {
-  struct flex_interval_history int_hist = FLEX_HISTORY_INIT(LEN_BITS, 0.0, 0.0);
+  struct adafs_interval_history int_hist = ADAFS_HISTORY_INIT(LEN_BITS, 0.0, 0.0);
   double log_int;
   if (argc != 3) {
     fprintf(stderr, "Usage: %s EventLog IntervalThreshold\n",

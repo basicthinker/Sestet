@@ -1,13 +1,13 @@
 //
 //  log.h
-//  sestet-rffs
+//  sestet-adafs
 //
 //  Created by Jinglei Ren on 2/24/13.
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
-#ifndef RFFS_LOG_H_
-#define RFFS_LOG_H_
+#ifndef ADAFS_LOG_H_
+#define ADAFS_LOG_H_
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -22,12 +22,12 @@
 typedef int handle_t;
 #endif
 
-#include "sys.h"
-#include "policy.h"
+#include "ada_sys.h"
+#include "ada_policy.h"
 
 extern struct flush_operations flush_ops;
-extern struct kset *rffs_kset;
-extern struct kobj_type rffs_la_ktype;
+extern struct kset *adafs_kset;
+extern struct kobj_type adafs_la_ktype;
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
     #define LOG_LEN 16384 // 16k * 4KB = 64MB
@@ -112,7 +112,7 @@ struct transaction {
 };
 
 #ifdef __KERNEL__
-extern struct kmem_cache *rffs_tran_cachep;
+extern struct kmem_cache *adafs_tran_cachep;
 #endif
 
 #define init_tran(tran) do { \
@@ -123,7 +123,7 @@ extern struct kmem_cache *rffs_tran_cachep;
 static inline struct transaction *new_tran(void) {
 	struct transaction *tran;
 #ifdef __KERNEL__
-	tran = (struct transaction *)kmem_cache_alloc(rffs_tran_cachep, GFP_KERNEL);
+	tran = (struct transaction *)kmem_cache_alloc(adafs_tran_cachep, GFP_KERNEL);
 #else
 	tran = (struct transaction *)malloc(sizeof(struct transaction));
 #endif
@@ -133,7 +133,7 @@ static inline struct transaction *new_tran(void) {
 
 #define is_tran_open(tran) ((tran)->begin == (tran)->end)
 
-struct rffs_log {
+struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
     unsigned int l_begin; // begin of prepared entries
     unsigned int l_head; // begin of active entries
@@ -153,7 +153,7 @@ struct rffs_log {
 #define __log_tail_tran(log)	\
 	list_entry((log)->l_trans.prev, struct transaction, list)
 
-static inline void log_init(struct rffs_log *log) {
+static inline void log_init(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
     log->l_begin = 0;
     log->l_head = 0;
@@ -162,30 +162,30 @@ static inline void log_init(struct rffs_log *log) {
     spin_lock_init(&log->l_lock);
     __log_add_tran(log, tran);
 
-    log->l_kobj.kset = rffs_kset;
+    log->l_kobj.kset = adafs_kset;
     init_completion(&log->l_kobj_unregister);
 }
 
-extern int log_flush(struct rffs_log *log, unsigned int nr);
+extern int log_flush(struct adafs_log *log, unsigned int nr);
 
-static inline void log_destroy(struct rffs_log *log) {
+static inline void log_destroy(struct adafs_log *log) {
 	struct transaction *pos, *tmp;
 
 	log_flush(log, UINT_MAX);
 
 	list_for_each_entry_safe(pos, tmp, &log->l_trans, list) {
-		kmem_cache_free(rffs_tran_cachep, pos);
+		kmem_cache_free(adafs_tran_cachep, pos);
 	}
 
 	kobject_put(&log->l_kobj);
 	wait_for_completion(&log->l_kobj_unregister);
 }
 
-static inline void __log_seal(struct rffs_log *log) {
+static inline void __log_seal(struct adafs_log *log) {
 	struct transaction *tran = __log_tail_tran(log);
     unsigned int end = L_END(log);
     if (log->l_head == end) {
-        PRINT(WARNING "[rffs] nothing to seal: %u-%u-%u\n",
+        PRINT(WARNING "[adafs] nothing to seal: %u-%u-%u\n",
                 log->l_begin, log->l_head, end);
         return;
     }
@@ -198,7 +198,7 @@ static inline void __log_seal(struct rffs_log *log) {
     log->l_head = tran->end;
 }
 
-static inline void log_seal(struct rffs_log *log) {
+static inline void log_seal(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
 
     spin_lock(&log->l_lock);
@@ -207,7 +207,7 @@ static inline void log_seal(struct rffs_log *log) {
     spin_unlock(&log->l_lock);
 }
 
-static inline int log_append(struct rffs_log *log, struct log_entry *entry,
+static inline int log_append(struct adafs_log *log, struct log_entry *entry,
         unsigned int *enti) {
     int err;
     unsigned int tail = (unsigned int)atomic_inc_return(&log->l_end) - 1;
@@ -227,11 +227,11 @@ static inline int log_append(struct rffs_log *log, struct log_entry *entry,
     }
     *L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
-    RFFS_TRACE(INFO "[rffs] log_append(): " LE_DUMP(entry));
+    ADAFS_TRACE(INFO "[adafs] log_append(): " LE_DUMP(entry));
     return 0;
 }
 
-static inline unsigned long __log_staleness_sum(struct rffs_log *log) {
+static inline unsigned long __log_staleness_sum(struct adafs_log *log) {
     unsigned long sum = 0;
     struct transaction *tran;
     list_for_each_entry(tran, &log->l_trans, list) {
@@ -240,7 +240,7 @@ static inline unsigned long __log_staleness_sum(struct rffs_log *log) {
     return sum;
 }
 
-static inline unsigned long log_staleness_sum(struct rffs_log *log) {
+static inline unsigned long log_staleness_sum(struct adafs_log *log) {
     unsigned long sum;
     spin_lock(&log->l_lock);
     sum = __log_staleness_sum(log);
@@ -248,9 +248,9 @@ static inline unsigned long log_staleness_sum(struct rffs_log *log) {
     return sum;
 }
 
-extern int __log_sort(struct rffs_log *log, int begin, int end);
+extern int __log_sort(struct adafs_log *log, int begin, int end);
 
-static inline int log_sort(struct rffs_log *log, int begin, int end) {
+static inline int log_sort(struct adafs_log *log, int begin, int end) {
     int ret;
     spin_lock(&log->l_lock);
     ret = __log_sort(log, begin, end);
@@ -266,20 +266,20 @@ struct flush_operations {
 
 #ifdef __KERNEL__ /* for sysfs */
 
-struct rffs_log_attr {
+struct adafs_log_attr {
 	struct attribute attr;
-	ssize_t (*show)(struct rffs_log *, char *);
-	ssize_t (*store)(struct rffs_log *, const char *, size_t);
+	ssize_t (*show)(struct adafs_log *, char *);
+	ssize_t (*store)(struct adafs_log *, const char *, size_t);
 };
 
-#define RFFS_LOG_ATTR(name, mode, show, store) \
-		static struct rffs_log_attr rffs_la_##name = __ATTR(name, mode, show, store)
-#define RFFS_RO_LA(name) RFFS_LOG_ATTR(name, 0444, name##_show, NULL)
-#define RFFS_RW_LA(name) RFFS_LOG_ATTR(name, 0644, name##_show, name##_store)
+#define ADAFS_LOG_ATTR(name, mode, show, store) \
+		static struct adafs_log_attr adafs_la_##name = __ATTR(name, mode, show, store)
+#define ADAFS_RO_LA(name) ADAFS_LOG_ATTR(name, 0444, name##_show, NULL)
+#define ADAFS_RW_LA(name) ADAFS_LOG_ATTR(name, 0644, name##_show, name##_store)
 
-#define RFFS_LA(name) &rffs_la_##name.attr
+#define ADAFS_LA(name) &adafs_la_##name.attr
 
-static inline int rffs_strtoul(const char *buf, unsigned long *value)
+static inline int adafs_strtoul(const char *buf, unsigned long *value)
 {
 	char *endp;
 

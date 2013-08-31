@@ -6,8 +6,8 @@
  *  Copyright (C) 2013 Microsoft Research Asia. All rights reserved.
  */
 
-#ifndef RFFS_SHASHTABLE_H_
-#define RFFS_SHASHTABLE_H_
+#ifndef ADAFS_SHASHTABLE_H_
+#define ADAFS_SHASHTABLE_H_
 
 #include <linux/list.h>
 #include <linux/hash.h>

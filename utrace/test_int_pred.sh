@@ -20,6 +20,7 @@ do
 
   python proc-ev-data.py $ev_file > $file_pre
   ./test_int_pred.out $file_pre $thr_m $thr_int > $file_pre.int 2>/dev/null
+  ./comp_int_pred.out $file_pre $thr_int >> $file_pre.int
 
   tmp=(`cat $file_pre.int`)
   num_conf=`expr $num_conf + ${tmp[1]}`

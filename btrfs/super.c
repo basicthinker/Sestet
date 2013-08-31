@@ -54,8 +54,8 @@
 #include "export.h"
 #include "compression.h"
 
-#include "rffs.h"
-#include "btr-rffs.h"
+#include "ada_fs.h"
+#include "btr-adafs.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/btrfs.h>
@@ -1233,16 +1233,21 @@ static void btrfs_interface_exit(void)
 		printk(KERN_INFO "misc_deregister failed for control device");
 }
 
+// AdaFS: btrfs/sysfs.c
+extern struct kset *btrfs_kset;
+
 static int __init init_btrfs_fs(void)
 {
 	int err;
 
-	// RFFS:
-	err = rffs_init_hook(&rffs_fops);
-	if (err)
-		return err;
-
-	err = btrfs_init_sysfs();
+	// AdaFS:
+	//err = btrfs_init_sysfs();
+	//if (err)
+	//	return err;
+        btrfs_kset = kset_create_and_add("adafs", NULL, fs_kobj);
+        if (!btrfs_kset)
+                return -ENOMEM;
+       	err = adafs_init_hook(&adafs_fops, btrfs_kset);
 	if (err)
 		return err;
 
@@ -1296,7 +1301,7 @@ free_sysfs:
 
 static void __exit exit_btrfs_fs(void)
 {
-	rffs_exit_hook();
+	adafs_exit_hook();
 	btrfs_destroy_cachep();
 	btrfs_delayed_inode_exit();
 	extent_map_exit();

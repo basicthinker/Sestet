@@ -29,7 +29,7 @@
 #include "xattr.h"
 #include "acl.h"
 
-#include "rffs.h"
+#include "ada_fs.h"
 #include "trace-events-ext4.h"
 
 /*
@@ -1074,7 +1074,7 @@ got:
 	ext4_debug("allocating inode %lu\n", inode->i_ino);
 	trace_ext4_allocate_inode(inode, dir, mode);
 
-	rffs_new_inode_hook(dir, inode, mode); // RFFS
+	adafs_new_inode_hook(dir, inode, mode); // AdaFS
 	goto really_out;
 fail:
 	ext4_std_error(sb, err);

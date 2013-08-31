@@ -29,7 +29,7 @@
 #include "xattr.h"
 #include "acl.h"
 
-#include "rffs.h"
+#include "ada_fs.h"
 
 /*
  * Called when an inode is released. Note that this is different
@@ -135,7 +135,7 @@ ext4_file_write(struct kiocb *iocb, const struct iovec *iov,
 		ext4_aiodio_wait(inode);
 	}
 
-	ret = rffs_file_aio_write(iocb, iov, nr_segs, pos);
+	ret = adafs_file_aio_write(iocb, iov, nr_segs, pos);
 
 	if (unaligned_aio)
 		mutex_unlock(ext4_aio_mutex(inode));
@@ -267,7 +267,7 @@ const struct file_operations ext4_file_operations = {
 	.mmap		= ext4_file_mmap,
 	.open		= ext4_file_open,
 	.release	= ext4_release_file,
-	.fsync		= rffs_sync_file,
+	.fsync		= adafs_sync_file,
 	.splice_read	= generic_file_splice_read,
 	.splice_write	= generic_file_splice_write,
 	.fallocate	= ext4_fallocate,

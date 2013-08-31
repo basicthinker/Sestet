@@ -40,7 +40,7 @@
 #include "locking.h"
 #include "compat.h"
 
-#include "rffs.h" // for RFFS
+#include "ada_fs.h" // for AdaFS
 
 /*
  * when auto defrag is enabled we
@@ -307,7 +307,7 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 					 size_t write_bytes,
 					 struct page **prepared_pages,
 					 struct iov_iter *i,
-					 struct inode *inode) // for RFFS
+					 struct inode *inode) // for AdaFS
 {
 	size_t copied = 0;
 	size_t total_copied = 0;
@@ -319,7 +319,7 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 				     PAGE_CACHE_SIZE - offset, write_bytes);
 		struct page *page = prepared_pages[pg];
 
-		struct rlog *rl = NULL; // for RFFS
+		struct rlog *rl = NULL; // for AdaFS
 
 		/*
 		 * Copy data from userspace to the current page
@@ -328,8 +328,8 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 		 * the pages are already locked
 		 */
 
-		// RFFS:
-		rl = rffs_try_assoc_rlog(inode, page);
+		// AdaFS:
+		rl = adafs_try_assoc_rlog(inode, page);
 
 		pagefault_disable();
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, count);
@@ -354,8 +354,8 @@ static noinline int btrfs_copy_from_user(loff_t pos, int num_pages,
 		write_bytes -= copied;
 		total_copied += copied;
 
-		// RFFS:
-		rffs_try_append_log(inode, rl, offset, copied);
+		// AdaFS:
+		adafs_try_append_log(inode, rl, offset, copied);
 
 		/* Return to btrfs_file_aio_write to fault page */
 		if (unlikely(copied == 0))
@@ -1690,7 +1690,7 @@ const struct file_operations btrfs_file_operations = {
 	.mmap		= btrfs_file_mmap,
 	.open		= generic_file_open,
 	.release	= btrfs_release_file,
-	.fsync		= rffs_sync_file,
+	.fsync		= adafs_sync_file,
 	.fallocate	= btrfs_fallocate,
 	.unlocked_ioctl	= btrfs_ioctl,
 #ifdef CONFIG_COMPAT

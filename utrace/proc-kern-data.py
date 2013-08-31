@@ -9,7 +9,7 @@ if len(sys.argv) != 2:
 log_file = open(sys.argv[1], 'r')
 
 line = log_file.readline()
-while line.find("[rffs] begin time") < 0:
+while line.find("[adafs] begin time") < 0:
   line = log_file.readline()
 begin_time = float(line[line.index('[') + 1:line.index(']')])
 

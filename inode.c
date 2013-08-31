@@ -40,8 +40,8 @@
 #include "internal.h"
 
 #include <linux/jbd2.h>
-#include "rffs.h"
-#include "log.h"
+#include "ada_fs.h"
+#include "ada_log.h"
 
 #define RAMFS_DEFAULT_MODE	0755
 
@@ -49,7 +49,7 @@ static const struct super_operations ramfs_ops;
 static const struct inode_operations ramfs_dir_inode_operations;
 
 static struct backing_dev_info ramfs_backing_dev_info = {
-	.name		= "rffs",
+	.name		= "adafs",
 	.ra_pages	= 0,	/* No readahead */
 	.capabilities	= BDI_CAP_NO_ACCT_AND_WRITEBACK |
 			  BDI_CAP_MAP_DIRECT | BDI_CAP_MAP_COPY |
@@ -272,7 +272,7 @@ static void ramfs_kill_sb(struct super_block *sb)
 }
 
 static struct file_system_type ramfs_fs_type = {
-	.name		= "rffs",
+	.name		= "adafs",
 	.mount		= ramfs_mount,
 	.kill_sb	= ramfs_kill_sb,
 };
@@ -281,25 +281,25 @@ static inline void ent_flush(handle_t *handle, struct log_entry *ent)
 {
 	struct page *page = (struct page *)ent->data;
 	void *addr = kmap_atomic(page, KM_USER0);
-	printk("[rffs] flushing page %p with %c of length %lu.\n",
+	printk("[adafs] flushing page %p with %c of length %lu.\n",
 			addr, *(char *)addr, ent_len(*ent));
 	kunmap_atomic(addr, KM_USER0);
 }
 
-static struct flush_operations rffs_fops = {
+static struct flush_operations adafs_fops = {
 	.ent_flush = ent_flush,
 };
 
 static int __init init_ramfs_fs(void)
 {
-	int err = rffs_init_hook(&rffs_fops);
+	int err = adafs_init_hook(&adafs_fops);
 	if (err) return err;
 	return register_filesystem(&ramfs_fs_type);
 }
 
 static void __exit exit_ramfs_fs(void)
 {
-	rffs_exit_hook();
+	adafs_exit_hook();
 	unregister_filesystem(&ramfs_fs_type);
 }
 

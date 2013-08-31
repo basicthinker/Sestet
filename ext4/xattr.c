@@ -1597,7 +1597,7 @@ static void ext4_xattr_rehash(struct ext4_xattr_header *header,
 int __init
 ext4_init_xattr(void)
 {
-	ext4_xattr_cache = mb_cache_create("rffs_xattr", 6);
+	ext4_xattr_cache = mb_cache_create("adafs_xattr", 6);
 	if (!ext4_xattr_cache)
 		return -ENOMEM;
 	return 0;

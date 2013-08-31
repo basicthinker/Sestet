@@ -5,7 +5,7 @@ if [ $# -ne 1 ]; then
 	exit -1
 fi
 
-lib_files=(hashtable.h list.h log.c log.h rffs_file.c rffs.h rlog.h sys.h)
+lib_files=(shashtable.h ada_log.c ada_log.h ada_file.c ada_fs.h ada_rlog.h ada_sys.h)
 
 for ((i=0;i<${#lib_files[*]};i=i+1))
 do
@@ -13,4 +13,6 @@ do
 	ln -sf ../$file $1/$file
 done
 
-cp policy.h $1/policy.h
+if [ ! -f $1/ada_policy.h ]; then
+	cp ada_policy.h $1/ada_policy.h
+fi

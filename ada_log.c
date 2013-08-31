@@ -1,20 +1,20 @@
 //
 //  log.c
-//  sestet-rffs
+//  sestet-adafs
 //
 //  Created by Jinglei Ren on 2/27/13.
 //  Copyright (c) 2013 Microsoft Research Asia. All rights reserved.
 //
 
 #ifdef __KERNEL__
-#include "rlog.h"
-#include "rffs.h"
+#include "ada_rlog.h"
+#include "ada_fs.h"
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/page-flags.h>
 #include <linux/pagemap.h>
 #endif
-#include "log.h"
+#include "ada_log.h"
 
 #define CUT_OFF 4
 #define STACK_SIZE 32
@@ -32,7 +32,7 @@
             SWAP_ENTRY(entry(i), entry(j)); } while (0)
 
 #ifdef __KERNEL__
-struct kmem_cache *rffs_tran_cachep;
+struct kmem_cache *adafs_tran_cachep;
 #endif
 
 struct stack_elem {
@@ -82,7 +82,7 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     return l;
 }
 
-int __log_sort(struct rffs_log *log, int begin, int end) {
+int __log_sort(struct adafs_log *log, int begin, int end) {
     struct stack_elem elem;
     int p;
     if (begin > end) {
@@ -111,7 +111,7 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 				le_pgi(&entry(i - 1)) == le_pgi(&entry(i)) &&
 				!le_meta(&entry(i - 1))) {
 
-			RFFS_TRACE(INFO "[rffs] merge_inval() invalidates entry: "
+			ADAFS_TRACE(INFO "[adafs] merge_inval() invalidates entry: "
 					LE_DUMP(&entry(i - 1)));
 			le_set_inval(&entry(i - 1));
 
@@ -134,7 +134,7 @@ static inline int do_flush(handle_t *handle, struct log_entry *le) {
 	if (le_meta(le)) return 0;
 
 	if (le_valid(le) && flush_ops.ent_flush) {
-		RFFS_TRACE(KERN_INFO "[rffs] do_flush() flushes page: " LE_DUMP_PAGE(le));
+		ADAFS_TRACE(KERN_INFO "[adafs] do_flush() flushes page: " LE_DUMP_PAGE(le));
 		flush_ops.ent_flush(handle, le);
 	}
 
@@ -152,7 +152,7 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
-static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
+static inline int __log_flush(struct adafs_log *log, unsigned int nr) {
     unsigned int begin, end;
     unsigned int i;
     int err = 0;
@@ -168,7 +168,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         tran = list_first_entry(&log->l_trans, struct transaction, list);
         if (is_tran_open(tran)) break;
         if (tran->begin != end) {
-            PRINT(ERR "[rffs] Transactions do not join: %u <-> %u\n",
+            PRINT(ERR "[adafs] Transactions do not join: %u <-> %u\n",
                     end, tran->begin);
             return -EFAULT;
         }
@@ -176,21 +176,21 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         list_del(&tran->list);
         --nr;
 #ifdef __KERNEL__
-        kmem_cache_free(rffs_tran_cachep, tran);
+        kmem_cache_free(adafs_tran_cachep, tran);
 #else
         free(tran);
 #endif
     }
     if (begin == end) {
-    	PRINT(WARNING "[rffs] No transaction flushed: l_begin = %u\n", begin);
+    	PRINT(WARNING "[adafs] No transaction flushed: l_begin = %u\n", begin);
         return -ENODATA;
     }
     spin_unlock(&log->l_lock);
 
-    PRINT(INFO "[rffs] num_entries=%d\n", end - begin);
+    PRINT(INFO "[adafs] num_entries=%d\n", end - begin);
     err = __log_sort(log, begin, end);
     if (err) {
-        PRINT(ERR "[rffs] log_sort(%u, %u) failed for log %p: %d.\n",
+        PRINT(ERR "[adafs] log_sort(%u, %u) failed for log %p: %d.\n",
                 begin, end, log, err);
     }
     merge_inval(entries, begin, end);
@@ -202,7 +202,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
     }
     if (unlikely(begin == end)) goto out;
 
-    RFFS_TRACE(KERN_DEBUG "[rffs-debug] get sb from page: " LE_DUMP_PAGE(&entry(begin)));
+    ADAFS_TRACE(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(&entry(begin)));
     sb = le_page(&entry(begin))->mapping->host->i_sb;
     handle = do_trans_begin(end - begin, sb);
 #else
@@ -212,7 +212,7 @@ static inline int __log_flush(struct rffs_log *log, unsigned int nr) {
         err = do_flush(handle, &entry(i));
         if (unlikely(err)) {
             log->l_begin = i;
-            PRINT(ERR "[rffs] __log_flush stops at %d (%d - %d)\n",
+            PRINT(ERR "[adafs] __log_flush stops at %d (%d - %d)\n",
             		i, begin, end);
             break;
         }
@@ -230,7 +230,7 @@ out:
     return err;
 }
 
-int log_flush(struct rffs_log *log, unsigned int nr) {
+int log_flush(struct adafs_log *log, unsigned int nr) {
     int ret;
     spin_lock(&log->l_lock);
     ret = __log_flush(log, nr);
@@ -240,17 +240,17 @@ int log_flush(struct rffs_log *log, unsigned int nr) {
 
 /* Attributes exported to sysfs */
 
-static ssize_t staleness_sum_show(struct rffs_log *log, char *buf)
+static ssize_t staleness_sum_show(struct adafs_log *log, char *buf)
 {
 	unsigned long sum = log_staleness_sum(log);
 	return snprintf(buf, PAGE_SIZE, "%lu\n", sum);
 }
 
-static ssize_t staleness_sum_store(struct rffs_log *log, const char *buf, size_t len)
+static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_t len)
 {
 	unsigned long req_sum;
 
-	if (rffs_strtoul(buf, &req_sum) || req_sum != 0)
+	if (adafs_strtoul(buf, &req_sum) || req_sum != 0)
 		return -EINVAL;
 
 	log_seal(log);
@@ -260,65 +260,65 @@ static ssize_t staleness_sum_store(struct rffs_log *log, const char *buf, size_t
 
 unsigned long staleness_limit = 16 * PAGE_SIZE;
 
-static ssize_t staleness_limit_show(struct rffs_log *log, char *buf)
+static ssize_t staleness_limit_show(struct adafs_log *log, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%lu\n", staleness_limit);
 }
 
-static ssize_t staleness_limit_store(struct rffs_log *log, const char *buf, size_t len)
+static ssize_t staleness_limit_store(struct adafs_log *log, const char *buf, size_t len)
 {
 	unsigned long limit;
 
-	if (rffs_strtoul(buf, &limit))
+	if (adafs_strtoul(buf, &limit))
 		return -EINVAL;
 
 	staleness_limit = limit;
     return len;
 }
 
-RFFS_RW_LA(staleness_sum);
-RFFS_RW_LA(staleness_limit);
+ADAFS_RW_LA(staleness_sum);
+ADAFS_RW_LA(staleness_limit);
 
-static struct attribute *rffs_log_attrs[] = {
-		RFFS_LA(staleness_sum),
-		RFFS_LA(staleness_limit),
+static struct attribute *adafs_log_attrs[] = {
+		ADAFS_LA(staleness_sum),
+		ADAFS_LA(staleness_limit),
 		NULL,
 };
 
-static ssize_t rffs_la_show(struct kobject *kobj,
+static ssize_t adafs_la_show(struct kobject *kobj,
 		struct attribute *attr, char *buf)
 {
-	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
-	struct rffs_log_attr *a = container_of(attr, struct rffs_log_attr, attr);
+	struct adafs_log *log = container_of(kobj, struct adafs_log, l_kobj);
+	struct adafs_log_attr *a = container_of(attr, struct adafs_log_attr, attr);
 
 	return a->show ? a->show(log, buf) : 0;
 }
 
-static ssize_t rffs_la_store(struct kobject *kobj,
+static ssize_t adafs_la_store(struct kobject *kobj,
 		struct attribute *attr, const char *buf, size_t len)
 {
-	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
-	struct rffs_log_attr *a = container_of(attr, struct rffs_log_attr, attr);
+	struct adafs_log *log = container_of(kobj, struct adafs_log, l_kobj);
+	struct adafs_log_attr *a = container_of(attr, struct adafs_log_attr, attr);
 
 	return a->store ? a->store(log, buf, len) : 0;
 }
 
-static void rffs_la_release(struct kobject *kobj)
+static void adafs_la_release(struct kobject *kobj)
 {
-	struct rffs_log *log = container_of(kobj, struct rffs_log, l_kobj);
+	struct adafs_log *log = container_of(kobj, struct adafs_log, l_kobj);
 	complete(&log->l_kobj_unregister);
 }
 
-static const struct sysfs_ops rffs_la_ops = {
-	.show	= rffs_la_show,
-	.store	= rffs_la_store,
+static const struct sysfs_ops adafs_la_ops = {
+	.show	= adafs_la_show,
+	.store	= adafs_la_store,
 };
 
-struct kobj_type rffs_la_ktype = {
-	.default_attrs	= rffs_log_attrs,
-	.sysfs_ops		= &rffs_la_ops,
-	.release		= rffs_la_release,
+struct kobj_type adafs_la_ktype = {
+	.default_attrs	= adafs_log_attrs,
+	.sysfs_ops		= &adafs_la_ops,
+	.release		= adafs_la_release,
 };
 
-struct kset *rffs_kset;
+struct kset *adafs_kset;
 

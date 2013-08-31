@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "policy_util.h"
+#include "ada_policy_util.h"
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -47,7 +47,7 @@ static inline void trace_state(enum state ns, double timeout) {
     (fh_update_interval(&(ts)[(s)].int_hist, &(in)))
 
 #define update_timer(ts, s) ({ \
-    struct flex_interval_history *fh = &(ts)[(s)].int_hist; \
+    struct adafs_interval_history *fh = &(ts)[(s)].int_hist; \
     (ts)[(s)].timer = fh->seq ? fh_state(fh) / fh_len(fh) : THR_INT; })
 
 #define predict_int(ts) update_timer(ts, ST_DIS)
@@ -66,11 +66,11 @@ double total_len = 0.0;
 } while (0)
 
 // Returns timer value
-double transfer(struct flex_touch_state ts[],
+double transfer(struct adafs_touch_state ts[],
     enum state *s, enum event ev, double in);
 
 int main(int argc, char *argv[]) {
-  struct flex_touch_state ts[2] = { FLEX_TOUCH_STATE_INIT(LEN_BITS), FLEX_TOUCH_STATE_INIT(LEN_BITS) };
+  struct adafs_touch_state ts[2] = { ADAFS_TOUCH_STATE_INIT(LEN_BITS), ADAFS_TOUCH_STATE_INIT(LEN_BITS) };
   enum state s;
   double log_int;
   double timeout;
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-double transfer(struct flex_touch_state ts[],
+double transfer(struct adafs_touch_state ts[],
     enum state *s, enum event ev, double in) {
   switch (*s) {
   case ST_CON:
