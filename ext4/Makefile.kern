@@ -2,16 +2,16 @@
 # Makefile for the linux ext4-filesystem routines.
 #
 
-obj-m += adafs.o
+obj-m += eafs.o
 
-adafs-y	:= balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o page-io.o \
+eafs-y	:= balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o page-io.o \
 		ioctl.o namei.o super.o symlink.o hash.o resize.o extents.o \
 		ext4_jbd2.o migrate.o mballoc.o block_validity.o move_extent.o \
 		mmp.o ada_file.o ada_log.o ext4-adafs.o
 
-adafs-$(CONFIG_EXT4_FS_XATTR)		+= xattr.o xattr_user.o xattr_trusted.o
-adafs-$(CONFIG_EXT4_FS_POSIX_ACL)	+= acl.o
-adafs-$(CONFIG_EXT4_FS_SECURITY)	+= xattr_security.o
+eafs-$(CONFIG_EXT4_FS_XATTR)		+= xattr.o xattr_user.o xattr_trusted.o
+eafs-$(CONFIG_EXT4_FS_POSIX_ACL)	+= acl.o
+eafs-$(CONFIG_EXT4_FS_SECURITY)		+= xattr_security.o
 
 #ccflags-y += -DADAFS_DEBUG
 

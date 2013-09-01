@@ -1,7 +1,7 @@
 
-obj-m := badafs.o
+obj-m := bafs.o
 
-badafs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
+bafs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
 	   file-item.o inode-item.o inode-map.o disk-io.o \
 	   transaction.o inode.o file.o tree-defrag.o \
 	   extent_map.o sysfs.o struct-funcs.o xattr.o ordered-data.o \
@@ -23,7 +23,7 @@ clean:
 install:
 	sudo insmod $(KSRC)/lib/zlib_deflate/zlib_deflate.ko
 	sudo insmod $(KSRC)/lib/libcrc32c.ko
-	sudo insmod badafs.ko
+	sudo insmod bafs.ko
 
 uninstall:
-	sudo rmmod badafs libcrc32c zlib_deflate
+	sudo rmmod bafs libcrc32c zlib_deflate
