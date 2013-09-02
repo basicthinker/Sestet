@@ -1072,9 +1072,9 @@ got:
 	}
 
 	ext4_debug("allocating inode %lu\n", inode->i_ino);
+	adafs_new_inode_hook(dir, inode, mode); // AdaFS
 	trace_ext4_allocate_inode(inode, dir, mode);
 
-	adafs_new_inode_hook(dir, inode, mode); // AdaFS
 	goto really_out;
 fail:
 	ext4_std_error(sb, err);

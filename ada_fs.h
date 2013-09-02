@@ -107,16 +107,14 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 	BUG_ON(li > MAX_LOG_NUM);
 
 	if (rl_enti(rl) != L_NULL && L_NG(log->l_head, rl_enti(rl))) { // active page
-		struct transaction *tran = __log_tail_tran(log);
 		le_set_len(L_ENT(log, rl_enti(rl)), offset + copied);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[adafs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
-		on_write_old_page(log, tran->stat, copied);
+		on_write_old_page(log, copied);
 	} else {
 		unsigned int ei, pgv;
 		struct log_entry le = LE_INITIALIZER;
-		struct transaction *tran;
 
 		le_set_ino(&le, host->i_ino);
 		le_init_pgi(&le, rl_page(rl)->index);
@@ -136,20 +134,20 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		if (unlikely(err)) return err;
 		rl_set_enti(rl, ei);
 
-		tran = __log_tail_tran(log);
-		on_write_new_page(log, tran->stat, copied);
+		on_write_new_page(log, copied);
 	}
 	return err;
 }
 
 // Put before truncate and free related pages
-static inline void adafs_truncate_hook(struct inode *inode, loff_t newsize)
+static inline void adafs_truncate_hook(struct inode *inode,
+		loff_t lstart, loff_t lend)
 {
 	struct adafs_log *log = adafs_logs + (unsigned int)(long)inode->i_private;
 	struct address_space *mapping = inode->i_mapping;
 	unsigned int i;
 	struct pagevec pvec;
-	pgoff_t pgi, start, next;
+	pgoff_t start, end, next;
 	struct page *page;
 	struct rlog *rl;
 	struct log_entry *le;
@@ -157,7 +155,9 @@ static inline void adafs_truncate_hook(struct inode *inode, loff_t newsize)
 	ADAFS_TRACE(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, newsize=%lu\n",
 			inode->i_ino, (unsigned long)newsize);
 
-	start = (newsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	//BUG_ON((lend & (PAGE_CACHE_SIZE - 1)) != (PAGE_CACHE_SIZE - 1));
+	end = (lend >> PAGE_CACHE_SHIFT);
 
 	spin_lock(&log->l_lock);
 	for (i = L_END(log) - 1;
@@ -169,25 +169,29 @@ static inline void adafs_truncate_hook(struct inode *inode, loff_t newsize)
 			ADAFS_TRACE(KERN_INFO "[adafs] adafs_truncate_hook() breaks at %u\n", i);
 			break;
 		}
-		if (le_pgi(le) >= start)
+		if (le_pgi(le) >= start && le_pgi(le) <= end) {
 			le_set_inval(le);
+			on_evict_page(log, le_len(le));
+		}
 	}
 	spin_unlock(&log->l_lock);
 
 	pagevec_init(&pvec, 0);
 	next = start;
-	while (pagevec_lookup(&pvec, mapping, next, PAGEVEC_SIZE)) {
-		for (i = 0; i < pagevec_count(&pvec); i++) {
+	while (next <= end && pagevec_lookup(&pvec, mapping, next,
+			min(end - next + 1, (pgoff_t)PAGEVEC_SIZE))) {
+		for (i = 0; i < pagevec_count(&pvec); ++i) {
 			page = pvec.pages[i];
-			pgi = page->index;
-			if (pgi > next)
-				next = pgi;
-			next++;
+			next = page->index;
+			if (next > end)
+				break;
+
 			// TODO: check page reference first
 			rl = find_rlog(page_rlog, page);
 			if (rl) evict_rlog(rl);
 		}
 		pagevec_release(&pvec);
+		++next;
 	}
 }
 
@@ -196,7 +200,7 @@ static inline void adafs_evict_inode_hook(struct inode *inode)
 {
 	ADAFS_TRACE(KERN_INFO "[adafs] adafs_evict_inode_hook() for ino=%lu\n", inode->i_ino);
 
-	adafs_truncate_hook(inode, 0);
+	adafs_truncate_hook(inode, 0, (loff_t)-1);
 }
 
 static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_inode)

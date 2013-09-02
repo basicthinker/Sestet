@@ -44,6 +44,7 @@
 #include "ext4_jbd2.h"
 #include "ext4_extents.h"
 
+#include "ada_fs.h"
 #include "trace-events-ext4.h"
 
 #define EXT4_EXT_DATA_VALID1	0x8  /* first half contains valid data */
@@ -4255,6 +4256,7 @@ int ext4_ext_punch_hole(struct file *file, loff_t offset, loff_t length)
 
 	/* Now release the pages */
 	if (last_page_offset > first_page_offset) {
+		adafs_truncate_hook(inode, first_page_offset, last_page_offset - 1);
 		truncate_inode_pages_range(mapping, first_page_offset,
 					   last_page_offset-1);
 	}
