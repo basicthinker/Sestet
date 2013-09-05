@@ -9,7 +9,8 @@
 #ifndef ADAFS_POLICY_H_
 #define ADAFS_POLICY_H_
 
-extern unsigned long staleness_limit;
+#define TRAN_LIMIT 8192 // in blocks, 32 MB
+extern unsigned long staleness_limit; // in blocks
 
 struct tran_stat {
 	unsigned long merg_size;
@@ -42,10 +43,10 @@ struct tran_stat {
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write old", log, &stat); \
-		if (stat.staleness >= staleness_limit) { \
+		if (stat.staleness >= TRAN_LIMIT) { \
 			/* TODO: little chance for race if not protected */ \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= 16) \
+			if (L_DIST((log)->l_begin, (log)->l_head) >= staleness_limit) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 
@@ -58,10 +59,10 @@ struct tran_stat {
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write new", log, &stat); \
-		if (stat.staleness >= staleness_limit) { \
+		if (stat.staleness >= TRAN_LIMIT) { \
 			/* TODO: little chance for race if not protected */ \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= 16) \
+			if (L_DIST((log)->l_begin, (log)->l_head) >= staleness_limit) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 
