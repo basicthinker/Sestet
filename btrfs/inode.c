@@ -54,6 +54,8 @@
 #include "free-space-cache.h"
 #include "inode-map.h"
 
+#include "ada_fs.h"
+
 struct btrfs_iget_args {
 	u64 ino;
 	struct btrfs_root *root;
@@ -4530,6 +4532,7 @@ static struct inode *btrfs_new_inode(struct btrfs_trans_handle *trans,
 	insert_inode_hash(inode);
 	inode_tree_add(inode);
 
+	adafs_new_inode_hook(dir, inode, mode);
 	trace_btrfs_inode_new(inode);
 	btrfs_set_inode_last_trans(trans, inode);
 
