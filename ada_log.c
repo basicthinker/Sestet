@@ -208,6 +208,8 @@ static inline int __log_flush(struct adafs_log *log, unsigned int nr) {
 #else
     handle = do_trans_begin(end - begin, NULL);
 #endif
+    if (IS_ERR(handle)) goto out;
+
     for (i = begin; L_LESS(i, end); ++i) {
         err = do_flush(handle, &entry(i));
         if (unlikely(err)) {
