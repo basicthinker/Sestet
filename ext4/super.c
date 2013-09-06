@@ -51,7 +51,6 @@
 #include "mballoc.h"
 
 #include "ada_fs.h"
-#include "ext4-adafs.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace-events-ext4.h"

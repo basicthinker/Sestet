@@ -21,11 +21,11 @@
 #define RLOG_HASH_BITS 10
 
 struct kiocb;
-struct flush_operations;
 extern struct adafs_log adafs_logs[MAX_LOG_NUM];
 extern struct task_struct *adafs_flusher;
 extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
+extern const struct flush_operations adafs_fops;
 
 
 /* Hooks */

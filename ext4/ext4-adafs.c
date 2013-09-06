@@ -1,7 +1,32 @@
 #include <linux/fs.h>
+#include <linux/jbd2.h>
+#include <linux/buffer_head.h>
 #include "ext4.h"
 #include "ext4_jbd2.h"
-#include "ext4-adafs.h"
+
+#include "ada_log.h"
+
+extern const struct flush_operations adafs_fops;
+
+extern int walk_page_buffers(handle_t *handle,
+                             struct buffer_head *head,
+                             unsigned from,
+                             unsigned to,
+                             int *partial,
+                             int (*fn)(handle_t *handle,
+                                       struct buffer_head *bh));
+extern int bget_one(handle_t *handle, struct buffer_head *bh);
+
+extern int bput_one(handle_t *handle, struct buffer_head *bh);
+
+extern int do_journal_get_write_access(handle_t *handle,
+		struct buffer_head *bh);
+extern int write_end_fn(handle_t *handle, struct buffer_head *bh);
+
+extern int noalloc_get_block_write(struct inode *inode, sector_t iblock,
+		struct buffer_head *bh_result, int create);
+extern int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh);
+
 
 //inode.c
 static inline int __adafs_journalled_writepage(handle_t *handle, struct page *page,
@@ -125,7 +150,7 @@ static inline int adafs_writepage(handle_t *handle, struct page *page, unsigned 
 
 static handle_t *adafs_trans_begin(int npages, void *arg) {
 	struct super_block *sb = (struct super_block *)arg;
-	int blocks_per_page = 1 << (PAGE_CACHE_SHIFT - sb->s_blocksize_bits);
+	int blocks_per_page = (1 << (PAGE_CACHE_SHIFT - sb->s_blocksize_bits));
 	int nblocks = npages * blocks_per_page;
 	return ext4_journal_start_sb(sb, nblocks);
 }
