@@ -44,19 +44,25 @@
 
 #ifndef __KERNEL__
     #include "uatomic.h"
-    #define likely(cond) (cond)
-    #define unlikely(cond) (cond)
-    #define ULONG_MAX (~0UL)
-    #define PAGE_CACHE_SHIFT 12
-    #define PAGE_CACHE_SIZE (1 << PAGE_CACHE_SHIFT)
-    #define PAGE_CACHE_MASK (~(PAGE_CACHE_SIZE - 1))
+    #define likely(cond)    (cond)
+    #define unlikely(cond)  (cond)
+    #define ULONG_MAX           (~0UL)
+    #define PAGE_CACHE_SHIFT    12
+    #define PAGE_CACHE_SIZE     (1 << PAGE_CACHE_SHIFT)
+    #define PAGE_CACHE_MASK     (~(PAGE_CACHE_SIZE - 1))
 #endif
 
-#if defined(__KERNEL__) && defined(ADAFS_DEBUG)
-    #define ADAFS_TRACE(...)	printk(__VA_ARGS__)
-    #define ADAFS_BUG_ON(...)	BUG_ON(__VA_ARGS__)
+#ifndef ADA_RELEASE
+	#define ADAFS_TRACE(...)    PRINT(__VA_ARGS__)
 #else
-    #define ADAFS_TRACE(...)
+	#define ADAFS_TRACE(...)
+#endif
+
+#if defined(__KERNEL__) && defined(ADA_DEBUG)
+    #define ADAFS_DEBUG(...)    PRINT(__VA_ARGS__)
+    #define ADAFS_BUG_ON(...)   BUG_ON(__VA_ARGS__)
+#else
+    #define ADAFS_DEBUG(...)
     #define ADAFS_BUG_ON(...)
 #endif
 

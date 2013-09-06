@@ -76,7 +76,7 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 
 void adafs_exit_hook(void)
 {
-	int i;
+	int i, j;
 	struct sht_list *sl;
 	struct hlist_head *hl;
 	struct hlist_node *pos, *tmp;
@@ -86,9 +86,17 @@ void adafs_exit_hook(void)
 		printk(KERN_INFO "[adafs] adafs_flusher thread exits unclearly.");
 	}
 
+	i = 0;
+	j = (1 << (RLOG_HASH_BITS - 3));
 	for_each_hlist_safe(page_rlog, sl, hl) {
 		hlist_for_each_entry_safe(rl, pos, tmp, hl, rl_hnode) {
 			evict_rlog(rl);
+			++i;
+		}
+		if (--j == 0) {
+			i = 0;
+			j = (1 << (RLOG_HASH_BITS - 3));
+			ADAFS_TRACE(INFO "[adafs] adafs_exit_hook: evicted rlogs num=%d\n", i);
 		}
 	}
 	kmem_cache_destroy(adafs_rlog_cachep);
@@ -326,6 +334,6 @@ ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 int adafs_sync_file(struct file *file, int datasync) {
 	struct inode *inode = file->f_mapping->host;
-	printk("[adafs] adafs_sync_file() on file: ino=%lu\n", inode->i_ino);
+	PRINT(INFO "[adafs] adafs_sync_file() on file: ino=%lu\n", inode->i_ino);
 	return 0;
 }

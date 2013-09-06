@@ -227,7 +227,7 @@ static inline int log_append(struct adafs_log *log, struct log_entry *entry,
     }
     *L_ENT(log, tail) = *entry;
     if (likely(enti)) *enti = tail;
-    ADAFS_TRACE(INFO "[adafs] log_append(): " LE_DUMP(entry));
+    ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(entry));
     return 0;
 }
 

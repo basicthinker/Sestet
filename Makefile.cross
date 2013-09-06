@@ -1,4 +1,4 @@
-ccflags-y += -DADAFS_DEBUG
+ccflags-y += -DADA_DEBUG
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
 
 obj-m += adafs.o

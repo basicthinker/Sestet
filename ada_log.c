@@ -111,7 +111,7 @@ static void merge_inval(struct log_entry entries[], int begin, int end) {
 				le_pgi(&entry(i - 1)) == le_pgi(&entry(i)) &&
 				!le_meta(&entry(i - 1))) {
 
-			ADAFS_TRACE(INFO "[adafs] merge_inval() invalidates entry: "
+			ADAFS_DEBUG(INFO "[adafs] merge_inval() invalidates entry: "
 					LE_DUMP(&entry(i - 1)));
 			le_set_inval(&entry(i - 1));
 
@@ -134,7 +134,7 @@ static inline int do_flush(handle_t *handle, struct log_entry *le) {
 	if (le_meta(le)) return 0;
 
 	if (le_valid(le) && flush_ops.ent_flush) {
-		ADAFS_TRACE(KERN_INFO "[adafs] do_flush() flushes page: " LE_DUMP_PAGE(le));
+		ADAFS_DEBUG(KERN_INFO "[adafs] do_flush() flushes page: " LE_DUMP_PAGE(le));
 		flush_ops.ent_flush(handle, le);
 	}
 
@@ -187,7 +187,8 @@ static inline int __log_flush(struct adafs_log *log, unsigned int nr) {
     }
     spin_unlock(&log->l_lock);
 
-    PRINT(INFO "[adafs] num_entries=%d\n", end - begin);
+    ADAFS_TRACE(INFO "[adafs] __log_flush: begin=%u, end=%u\n", begin, end);
+
     err = __log_sort(log, begin, end);
     if (err) {
         PRINT(ERR "[adafs] log_sort(%u, %u) failed for log %p: %d.\n",
@@ -202,7 +203,7 @@ static inline int __log_flush(struct adafs_log *log, unsigned int nr) {
     }
     if (unlikely(begin == end)) goto out;
 
-    ADAFS_TRACE(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(&entry(begin)));
+    ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(&entry(begin)));
     sb = le_page(&entry(begin))->mapping->host->i_sb;
     handle = do_trans_begin(end - begin, sb);
 #else

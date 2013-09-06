@@ -44,12 +44,12 @@ struct rlog {
 #define assoc_rlog(rl, page, enti, sht) { \
 		rl_assoc_page(rl, page); \
 		rl_set_enti(rl, enti); \
-		ADAFS_TRACE(INFO "[adafs] assoc_rlog(): " RL_DUMP(rl)); \
+		ADAFS_DEBUG(INFO "[adafs] assoc_rlog(): " RL_DUMP(rl)); \
 		add_rlog(sht, rl); }
 
 #define evict_rlog(rl) { \
 		hlist_del(&rl->rl_hnode); \
-		ADAFS_TRACE(INFO "[adafs] evict_rlog(): " RL_DUMP(rl)); \
+		ADAFS_DEBUG(INFO "[adafs] evict_rlog(): " RL_DUMP(rl)); \
 		put_page((rl)->rl_page); \
 		rlog_free(rl); }
 

@@ -36,7 +36,7 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 {
 	if (dir) {
 		new_inode->i_private = dir->i_private;
-		ADAFS_TRACE(KERN_INFO "[adafs] new_inode_hook(): dir_ino=%lu, new_ino=%lu, log(%lu)\n",
+		ADAFS_DEBUG(KERN_INFO "[adafs] new_inode_hook(): dir_ino=%lu, new_ino=%lu, log(%lu)\n",
 				dir->i_ino, new_inode->i_ino, (unsigned long)dir->i_private);
 	}
 
@@ -152,7 +152,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	struct rlog *rl;
 	struct log_entry *le;
 
-	ADAFS_TRACE(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, newsize=%lu\n",
+	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, newsize=%lu\n",
 			inode->i_ino, (unsigned long)newsize);
 
 	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
@@ -166,7 +166,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 		if (le_inval(le) || le_ino(le) != inode->i_ino)
 			continue;
 		if (le_meta(le)) {
-			ADAFS_TRACE(KERN_INFO "[adafs] adafs_truncate_hook() breaks at %u\n", i);
+			ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() breaks at %u\n", i);
 			break;
 		}
 		if (le_pgi(le) >= start && le_pgi(le) <= end) {
@@ -198,7 +198,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 // Put before freeing in-mapping pages
 static inline void adafs_evict_inode_hook(struct inode *inode)
 {
-	ADAFS_TRACE(KERN_INFO "[adafs] adafs_evict_inode_hook() for ino=%lu\n", inode->i_ino);
+	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_evict_inode_hook() for ino=%lu\n", inode->i_ino);
 
 	adafs_truncate_hook(inode, 0, (loff_t)-1);
 }
@@ -206,7 +206,7 @@ static inline void adafs_evict_inode_hook(struct inode *inode)
 static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_inode)
 {
 	old_inode->i_private = new_dir->i_private;
-	ADAFS_TRACE(KERN_INFO "[adafs] rename_hook(): %lu->%lu to %lu\n",
+	ADAFS_DEBUG(KERN_INFO "[adafs] rename_hook(): %lu->%lu to %lu\n",
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
 }
 

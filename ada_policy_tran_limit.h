@@ -32,7 +32,7 @@ struct tran_stat {
 #define print_stat(info, log, stat)
 #else
 #define print_stat(info, log, stat) \
-		printk(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
 				(int)((log) - adafs_logs), info, \
 				(stat)->staleness, (stat)->merg_size, (stat)->length)
 #endif

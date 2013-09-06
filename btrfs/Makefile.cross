@@ -10,7 +10,7 @@ bafs-y += super.o ctree.o extent-tree.o print-tree.o root-tree.o dir-item.o \
 	   compression.o delayed-ref.o relocation.o delayed-inode.o scrub.o \
 	   ada_file.o ada_log.o btr-adafs.o
 
-#ccflags-y += -DADAFS_DEBUG
+#ccflags-y += -DADA_DEBUG
 #ccflags-y += -DADA_RELEASE
 
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
