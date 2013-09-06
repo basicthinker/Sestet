@@ -252,7 +252,7 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
 {
 	unsigned long req_sum;
 
-	if (adafs_strtoul(buf, &req_sum) || req_sum != 0)
+	if (kstrtoul(buf, 0, &req_sum) || req_sum != 0)
 		return -EINVAL;
 
 	log_seal(log);
@@ -260,30 +260,30 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
     return len;
 }
 
-unsigned long staleness_limit = 16 * PAGE_SIZE;
+unsigned int stal_limit_blocks = 256;
 
-static ssize_t staleness_limit_show(struct adafs_log *log, char *buf)
+static ssize_t stal_limit_blocks_show(struct adafs_log *log, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%lu\n", staleness_limit);
+	return snprintf(buf, PAGE_SIZE, "%u\n", stal_limit_blocks);
 }
 
-static ssize_t staleness_limit_store(struct adafs_log *log, const char *buf, size_t len)
+static ssize_t stal_limit_blocks_store(struct adafs_log *log, const char *buf, size_t len)
 {
-	unsigned long limit;
+	unsigned int limit;
 
-	if (adafs_strtoul(buf, &limit))
+	if (kstrtouint(buf, 0, &limit))
 		return -EINVAL;
 
-	staleness_limit = limit;
+	stal_limit_blocks = limit;
     return len;
 }
 
 ADAFS_RW_LA(staleness_sum);
-ADAFS_RW_LA(staleness_limit);
+ADAFS_RW_LA(stal_limit_blocks);
 
 static struct attribute *adafs_log_attrs[] = {
 		ADAFS_LA(staleness_sum),
-		ADAFS_LA(staleness_limit),
+		ADAFS_LA(stal_limit_blocks),
 		NULL,
 };
 

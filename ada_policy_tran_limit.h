@@ -9,8 +9,7 @@
 #ifndef ADAFS_POLICY_H_
 #define ADAFS_POLICY_H_
 
-#define ADAFS_TRAN_LIMIT 256 // in blocks
-extern unsigned int stal_limit_blocks;
+#define ADAFS_TRAN_LIMIT 16128 // in blocks, 63 MB
 
 struct tran_stat {
 	unsigned long merg_size;
@@ -29,10 +28,14 @@ struct tran_stat {
 #define ls_ratio(tran_stat)	\
 	((float)tran_stat.length/tran_stat.staleness)
 
+#ifdef ADA_RELEASE
+#define print_stat(info, log, stat)
+#else
 #define print_stat(info, log, stat) \
 		printk(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
 				(int)((log) - adafs_logs), info, \
 				(stat)->staleness, (stat)->merg_size, (stat)->length)
+#endif
 
 #define on_write_old_page(log, size) do { \
 		struct tran_stat *sp, stat; \
@@ -43,11 +46,10 @@ struct tran_stat {
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write old", log, &stat); \
-		if (stat.staleness >= TRAN_LIMIT) { \
+		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			/* TODO: little chance for race if not protected */ \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= stal_limit_blocks) \
-				wake_up_process(adafs_flusher); \
+			wake_up_process(adafs_flusher); \
 		} } while (0)
 
 #define on_write_new_page(log, size) do { \
@@ -59,11 +61,10 @@ struct tran_stat {
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write new", log, &stat); \
-		if (stat.staleness >= TRAN_LIMIT) { \
+		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			/* TODO: little chance for race if not protected */ \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= stal_limit_blocks) \
-				wake_up_process(adafs_flusher); \
+			wake_up_process(adafs_flusher); \
 		} } while (0)
 
 #define on_evict_page(log, size) do { \

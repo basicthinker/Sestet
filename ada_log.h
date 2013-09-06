@@ -279,17 +279,6 @@ struct adafs_log_attr {
 
 #define ADAFS_LA(name) &adafs_la_##name.attr
 
-static inline int adafs_strtoul(const char *buf, unsigned long *value)
-{
-	char *endp;
-
-	*value = simple_strtoul(skip_spaces(buf), &endp, 0);
-	endp = skip_spaces(endp);
-	if (*endp) return -EINVAL;
-
-	return 0;
-}
-
 #endif
 
 #endif
