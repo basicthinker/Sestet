@@ -250,14 +250,6 @@ static inline unsigned long log_staleness_sum(struct adafs_log *log) {
 
 extern int __log_sort(struct adafs_log *log, int begin, int end);
 
-static inline int log_sort(struct adafs_log *log, int begin, int end) {
-    int ret;
-    spin_lock(&log->l_lock);
-    ret = __log_sort(log, begin, end);
-    spin_unlock(&log->l_lock);
-    return ret;
-}
-
 struct flush_operations {
 	handle_t *(*trans_begin)(int nent, void *data);
 	int (*ent_flush)(handle_t *handle, struct log_entry *ent);
