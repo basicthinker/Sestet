@@ -63,13 +63,22 @@ int main(int argc, char *argv[]) {
 }
 
 /*
-  Test Runs
-  1. Normal run
-    Check dmesg log: 5 adafs flushes, each with NUM_PAGES/2 valid entries.
-    Check data after removal: 't'.
-  2. Unexpected removal after 5 fsync's (stdout lines)
-    Check dmesg log: should have 2 adafs flushes.
-    Check data after removal: 'h'. (If we use ext4, this would be 'j'.)
-  3. Disable fsync and repeat the above.
+ * Test Runs
+ *
+ * The policy should be:
+ * (1) to seal when staleness is over 2 * num_pages pages, and
+ * (2) to flush when length is over 2 * num_pages.
+ *
+ * 1. Normal run
+ *   Check dmesg log: 5 AdaFS flushes, each with num_pages valid entries.
+ *   Check data after removal: 't'.
+ * 2. Unexpected removal after 5 fsync's (stdout lines)
+ *   Check dmesg log: should have 2 adafs flushes.
+ *   Check data after removal: 'h'. (If we use Ext4, this would be 'j'.)
+ * 3. Disable fsync and repeat the above.
+ *
+ * A typical configuration:
+ * for totally 80 MB normal Ext4 writes, num_pages = 2048,
+ * AdaFS transaction limit = 16777216, staleness limit = 4096.
 */
 

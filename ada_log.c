@@ -114,7 +114,7 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 
 static inline int do_ent_flush(handle_t *handle, struct log_entry *le) {
 	if (likely(handle && flush_ops.ent_flush)) {
-		ADAFS_DEBUG(KERN_INFO "[adafs] do_flush() flushes page: " LE_DUMP_PAGE(le));
+		ADAFS_DEBUG(KERN_INFO "[adafs] do_ent_flush() flushes page: " LE_DUMP_PAGE(le));
 		return flush_ops.ent_flush(handle, le);
 	} else return 0;
 }
@@ -125,6 +125,14 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
+/*
+ * Any entry that is associated with a valid page should have its rlog evicted.
+ * Specifically, this include two types:
+ * (1) COW entry, whose page is solely kept by AdaFS;
+ * (2) Other valid non-COW entry, whose page is in system cache.
+ * Note that invalid entries already have their rlogs evicted by
+ * the inode eviction hook.
+ */
 #define try_evict_rlog(le) do { \
 		if (!le_meta(le) && (le_cow(le) || le_valid(le))) { \
 			struct rlog *rl = find_rlog(page_rlog, le_page(le)); \
@@ -160,7 +168,7 @@ static int __merge_flush(struct log_entry entries[],
 			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(le));
 					sb = le_page(le)->mapping->host->i_sb;
 
-			n = 1; // counts valid pages
+			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
@@ -173,8 +181,8 @@ static int __merge_flush(struct log_entry entries[],
 				} else ++n;
 			} // for
 			e = i;
-			ADAFS_TRACE("[adafs] merge_flush() begins flushing:"
-					" begin=%u, end=%u\n", b, e);
+			PRINT("[adafs] merge_flush() begins flushing:"
+					" begin=%u, end=%u, num=%u\n", b, e, n);
 			handle = do_trans_begin(n, sb);
 			ADAFS_BUG_ON(IS_ERR(handle));
 
@@ -244,7 +252,7 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
     return len;
 }
 
-unsigned int stal_limit_blocks = 256;
+unsigned int stal_limit_blocks = 4096;
 
 static ssize_t stal_limit_blocks_show(struct adafs_log *log, char *buf)
 {

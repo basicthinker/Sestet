@@ -9,7 +9,7 @@
 #ifndef ADAFS_POLICY_H_
 #define ADAFS_POLICY_H_
 
-#define ADAFS_TRAN_LIMIT 256 // in blocks
+#define ADAFS_TRAN_LIMIT 16777216 // 4096 blocks, in bytes
 extern unsigned int stal_limit_blocks;
 
 #include "ada_log.h"

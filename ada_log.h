@@ -208,14 +208,12 @@ static inline void log_destroy(struct adafs_log *log) {
 	wait_for_completion(&log->l_kobj_unregister);
 }
 
-static inline void __log_seal(struct adafs_log *log) {
+static inline int __log_seal(struct adafs_log *log) {
 	struct transaction *tran = __log_tail_tran(log);
 	unsigned int begin;
     unsigned int end = l_end(log);
     if (log->l_head == end) {
-        PRINT(WARNING "[adafs] nothing to seal: %u-%u-%u\n",
-                l_begin(log), log->l_head, l_end(log));
-        return;
+        return -ENODATA;
     }
 
     begin = l_begin(log);
@@ -226,34 +224,42 @@ static inline void __log_seal(struct adafs_log *log) {
     tran->begin = log->l_head;
     tran->end = end;
     log->l_head = tran->end;
+    return 0;
 }
 
 static inline void log_seal(struct adafs_log *log) {
-	struct transaction *tran = new_tran();
-
     spin_lock(&log->l_tlock);
-    __log_seal(log);
-    __log_add_tran(log, tran);
+    if (__log_seal(log) == 0) {
+    	struct transaction *tran = new_tran();
+    	__log_add_tran(log, tran);
+    }
     spin_unlock(&log->l_tlock);
 }
 
 static inline int log_append(struct adafs_log *log, struct log_entry *le,
-        unsigned int *le_seq) {
-    unsigned int tail = l_inc_end(log) - 1;
+		unsigned int *le_seq)
+{
+	unsigned int tail = l_end(log);
+	short n = 0;
 
-    if (seq_dist(l_begin(log), tail) >= LOG_LEN) {
-        PRINT("[adafs] log_append() failed: ino = %lu, pgi = %lu\n",
-                    le_ino(le), le_pgi(le));
-        return -EAGAIN;
-    }
-    /*
-     * There is little chance that the entry is being flushed
-     *  -- flash writing hardly catches up, thus we do not protect this region.
-     */
-    *L_ENT(log, tail) = *le;
-    if (likely(le_seq)) *le_seq = tail;
-    ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
-    return 0;
+	if (unlikely(seq_dist(l_begin(log), tail) >= LOG_LEN))
+		return -EAGAIN;
+
+	tail = l_inc_end(log) - 1;
+	while (seq_dist(l_begin(log), tail) >= LOG_LEN) {
+		if (++n == 0)
+			ADAFS_DEBUG("[adafs] log_append() stalls: ino = %lu, pgi = %lu\n",
+					le_ino(le), le_pgi(le));
+	}
+
+	/*
+	 * There is little chance that the entry is being flushed
+	 *  -- flash writing hardly catches up, thus we do not protect this region.
+	 */
+	*L_ENT(log, tail) = *le;
+	if (likely(le_seq)) *le_seq = tail;
+	ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
+	return 0;
 }
 
 static inline unsigned long __log_stal_sum(struct adafs_log *log) {

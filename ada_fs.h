@@ -43,10 +43,13 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 
 	if (S_ISREG(mode)) {
 		struct log_entry le = LE_INITIALIZER;
+		struct adafs_log *log = adafs_logs + (unsigned int)(long)new_inode->i_private;
 		le_set_ino(&le, new_inode->i_ino);
 		le_set_meta(&le);
-		log_append(adafs_logs + (unsigned int)(long)new_inode->i_private,
-				&le, NULL);
+		while (log_append(log, &le, NULL)) {
+			log_seal(log);
+			wake_up_process(adafs_flusher);
+		}
 	}
 }
 
@@ -131,8 +134,10 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 #ifdef DEBUG_PRP
 		else printk(KERN_DEBUG "[adafs] NP 2: %p\n", rl_page(rl));
 #endif
-		err = log_append(log, &le, &ei);
-		if (unlikely(err)) return err;
+		while (log_append(log, &le, &ei)) {
+			log_seal(log);
+			wake_up_process(adafs_flusher);
+		}
 		rl_set_enti(rl, ei);
 
 		on_write_new_page(log, copied);
@@ -153,8 +158,8 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	struct rlog *rl;
 	struct log_entry *le;
 
-	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, newsize=%lu\n",
-			inode->i_ino, (unsigned long)newsize);
+	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, start=%lu, end=%lu\n",
+			inode->i_ino, (unsigned long)lstart, (unsigned long)lend);
 
 	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	//BUG_ON((lend & (PAGE_CACHE_SIZE - 1)) != (PAGE_CACHE_SIZE - 1));
