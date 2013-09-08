@@ -87,7 +87,7 @@ static inline double cpu_util(struct cpu_stat *stat) {
   return 1 - rate;
 }
 
-static int cpu_freq(uint32_t *freq, int num) {
+static inline int cpu_freq(uint32_t *freq, int num) {
   char path[64];
   int i;
   FILE *fp;
@@ -103,7 +103,7 @@ static int cpu_freq(uint32_t *freq, int num) {
 
 #define WAKE_LOCK "write-energy-bench-wl"
 
-static int wake_lock(void) {
+static inline int wake_lock(void) {
   FILE *fp = fopen("/sys/power/wake_lock", "a");
   if (!fp) {
     return -EIO;
@@ -112,7 +112,7 @@ static int wake_lock(void) {
   return fclose(fp);
 }
 
-static int wake_unlock(void) {
+static inline int wake_unlock(void) {
   FILE *fp = fopen("/sys/power/wake_unlock", "a");
   if (!fp) {
     return -EIO;
@@ -121,7 +121,7 @@ static int wake_unlock(void) {
   return fclose(fp);
 }
 
-static int set_cpufreq(uint32_t freq, int cpu) {
+static inline int set_cpufreq(uint32_t freq, int cpu) {
   char path[64];
   FILE *fp;
   sprintf(path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_setspeed", cpu);

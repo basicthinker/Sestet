@@ -33,14 +33,13 @@ extern struct kobj_type adafs_la_ktype;
     #define LOG_MASK 32767
 #endif
 
-#define L_INDEX(p) ((p) & LOG_MASK)
-#define L_NULL  LOG_LEN
+#define L_INDEX(p)  ((p) & LOG_MASK)
 
 #define seq_dist(a, b)  ((unsigned int)((b) - (a)))
 #define seq_less(a, b)  ((int)((a) - (b)) < 0)
 #define seq_ng(a, b)    ((int)((a) - (b)) <= 0)
-
-#define LE_INVAL_INO	(ULONG_MAX)
+#define L_NULL          UINT_MAX
+#define LE_INVAL_INO	ULONG_MAX
 
 #define LE_PGI_SHIFT	(8)
 #define LE_PGI_MASK		(0xFF)
@@ -156,11 +155,11 @@ struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
     atomic_t l_begin;
     atomic_t l_end;
-    spinlock_t l_flock; /* protects l_begin and flushing */
+    struct mutex l_fmutex;  /* protects l_begin and flushing */
 
-    unsigned int l_head; // begin of active entries
+    unsigned int l_head;    /* begin of active entries */
     struct list_head l_trans;
-    spinlock_t l_tlock; /* protects l_head, and l_trans */
+    spinlock_t l_tlock;     /* protects l_head, and l_trans */
 
     struct kobject l_kobj;
     struct completion l_kobj_unregister;
@@ -184,7 +183,7 @@ static inline void log_init(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
     l_set_begin(log, 0);
     l_set_end(log, 0);
-    spin_lock_init(&log->l_flock);
+    mutex_init(&log->l_fmutex);
 
     log->l_head = 0;
     INIT_LIST_HEAD(&log->l_trans);
@@ -228,12 +227,14 @@ static inline int __log_seal(struct adafs_log *log) {
 }
 
 static inline void log_seal(struct adafs_log *log) {
+	int err;
     spin_lock(&log->l_tlock);
-    if (__log_seal(log) == 0) {
-    	struct transaction *tran = new_tran();
-    	__log_add_tran(log, tran);
-    }
+    err = __log_seal(log);
     spin_unlock(&log->l_tlock);
+	if (!err) {
+		struct transaction *tran = new_tran();
+		__log_add_tran(log, tran);
+	}
 }
 
 static inline int log_append(struct adafs_log *log, struct log_entry *le,

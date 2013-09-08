@@ -223,11 +223,11 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
         return -ENODATA;
     }
 
-    spin_lock(&log->l_flock);
+    mutex_lock(&log->l_fmutex);
     __log_sort(log, begin, end);
     err = __merge_flush(entries, begin, end);
     l_set_begin(log, end);
-    spin_unlock(&log->l_flock);
+    mutex_unlock(&log->l_fmutex);
     return err;
 }
 

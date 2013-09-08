@@ -165,7 +165,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	//BUG_ON((lend & (PAGE_CACHE_SIZE - 1)) != (PAGE_CACHE_SIZE - 1));
 	end = (lend >> PAGE_CACHE_SHIFT);
 
-	spin_lock(&log->l_flock);
+	mutex_lock(&log->l_fmutex);
 	for (i = l_end(log) - 1;
 			seq_ng(l_begin(log), i); --i) {
 		le = L_ENT(log, i);
@@ -181,7 +181,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 			on_evict_page(log, le_len(le));
 		}
 	}
-	spin_unlock(&log->l_flock);
+	mutex_unlock(&log->l_fmutex);
 
 	pagevec_init(&pvec, 0);
 	next = start;
