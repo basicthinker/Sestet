@@ -94,9 +94,9 @@ void adafs_exit_hook(void)
 			++i;
 		}
 		if (--j == 0) {
+			ADAFS_TRACE(INFO "[adafs] adafs_exit_hook: evicted rlogs num=%d\n", i);
 			i = 0;
 			j = (1 << (RLOG_HASH_BITS - 3));
-			ADAFS_TRACE(INFO "[adafs] adafs_exit_hook: evicted rlogs num=%d\n", i);
 		}
 	}
 	kmem_cache_destroy(adafs_rlog_cachep);

@@ -82,7 +82,7 @@ static inline unsigned int partition(struct log_entry entries[], int l, int r) {
     return l;
 }
 
-int __log_sort(struct adafs_log *log, int begin, int end) {
+int __log_sort(struct adafs_log *log, unsigned int begin, unsigned int end) {
     struct stack_elem elem;
     int p;
     if (begin > end) {
@@ -125,7 +125,7 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
-#define le_evict_rlog(le) do { \
+#define try_evict_rlog(le) do { \
 		if (!le_meta(le) && (le_cow(le) || le_valid(le))) { \
 			struct rlog *rl = find_rlog(page_rlog, le_page(le)); \
 			BUG_ON(!rl); \
@@ -133,35 +133,35 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 		} } while (0)
 
 #define le_for_each(le, i, begin, end) \
-		for (le = &entry(i = (begin)); L_LESS(i, end); le = &entry(++i))
+		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
 
 static int merge_flush(struct log_entry entries[],
 		const unsigned int begin, const unsigned int end) {
 	struct log_entry *le;
 	handle_t *handle;
 	struct super_block *sb;
-	unsigned int bi, ei, i, n;
+	unsigned int b, e, i, n;
 	int err;
 	unsigned long ino;
 
-	for (bi = begin; L_LESS(bi, end); bi = ei) {
-		le = &entry(bi);
+	for (b = begin; seq_less(b, end); b = e) {
+		le = &entry(b);
 		if (unlikely(le_inval(le))) {
-			le_for_each(le, i, bi, end) {
-				le_evict_rlog(le);
+			le_for_each(le, i, b, end) {
+				try_evict_rlog(le);
 			}
 			ADAFS_BUG_ON(i != end);
 			break;
 		} else if (le_meta(le)) {
-			ei = bi + 1;
+			e = b + 1;
 		} else { // to flush a group of entries
-			le = &entry(bi);
+			le = &entry(b);
 			ino = le_ino(le);
 			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(le));
 					sb = le_page(le)->mapping->host->i_sb;
 
 			n = 1; // counts valid pages
-			le_for_each(le, i, bi + 1, end) {
+			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
 					ADAFS_DEBUG(INFO "[adafs] merge_flush() invalidates entry: "
@@ -172,11 +172,14 @@ static int merge_flush(struct log_entry entries[],
 						le_set_len(le, le_len(&entry(i - 1)));
 				} else ++n;
 			} // for
-			ei = i;
+			e = i;
+			ADAFS_TRACE("[adafs] merge_flush() begins flushing:"
+					" begin=%u, end=%u\n", b, e);
 			handle = do_trans_begin(n, sb);
 			ADAFS_BUG_ON(IS_ERR(handle));
 
-			le_for_each(le, i, bi, ei) {
+			le_for_each(le, i, b, e) {
+				try_evict_rlog(le);
 				if (le_inval(le)) continue;
 		        err = do_ent_flush(handle, le);
 		        ADAFS_BUG_ON(err);
@@ -195,7 +198,7 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
     struct transaction *tran;
 
     spin_lock(&log->l_lock);
-    begin = end = log->l_begin;
+    begin = end = l_begin(log);
     while (nr) {
         tran = list_first_entry(&log->l_trans, struct transaction, list);
         if (is_tran_open(tran)) break;
@@ -209,14 +212,12 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
 #endif
         --nr;
     }
-    log->l_begin = end;
+    l_set_begin(log, end);
     spin_unlock(&log->l_lock);
     if (begin == end) {
     	PRINT(WARNING "[adafs] No transaction flushed: l_begin = %u\n", begin);
         return -ENODATA;
     }
-
-    ADAFS_TRACE(INFO "[adafs] log_flush(): begin=%u, end=%u\n", begin, end);
 
     err = __log_sort(log, begin, end);
     if (err) {
@@ -232,7 +233,7 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
 
 static ssize_t staleness_sum_show(struct adafs_log *log, char *buf)
 {
-	unsigned long sum = log_staleness_sum(log);
+	unsigned long sum = log_stal_sum(log);
 	return snprintf(buf, PAGE_SIZE, "%lu\n", sum);
 }
 
@@ -244,7 +245,7 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
 		return -EINVAL;
 
 	log_seal(log);
-	log_flush(log, UINT_MAX);
+	wake_up_process(adafs_flusher);
     return len;
 }
 

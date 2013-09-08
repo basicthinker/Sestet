@@ -23,7 +23,6 @@ typedef int handle_t;
 #endif
 
 #include "ada_sys.h"
-#include "ada_policy.h"
 
 extern struct flush_operations flush_ops;
 extern struct kset *adafs_kset;
@@ -37,9 +36,9 @@ extern struct kobj_type adafs_la_ktype;
 #define L_INDEX(p) ((p) & LOG_MASK)
 #define L_NULL  LOG_LEN
 
-#define L_DIST(a, b) ((unsigned int)((int)(b) - (int)(a)))
-#define L_LESS(a, b) ((a) != (b) && L_DIST(a, b) <= LOG_LEN)
-#define L_NG(a, b) (L_DIST(a, b) <= LOG_LEN)
+#define seq_dist(a, b)  ((unsigned int)((b) - (a)))
+#define seq_less(a, b)  ((int)((a) - (b)) < 0)
+#define seq_ng(a, b)    ((int)((a) - (b)) <= 0)
 
 #define LE_INVAL_INO	(ULONG_MAX)
 
@@ -47,7 +46,7 @@ extern struct kobj_type adafs_la_ktype;
 #define LE_PGI_MASK		(0xFF)
 
 #define LE_FLAGS_SHIFT	(PAGE_CACHE_SHIFT + 4)
-#define LE_LEN_SIZE	(PAGE_CACHE_SIZE << 4)
+#define LE_LEN_SIZE		(PAGE_CACHE_SIZE << 4)
 #define LE_FLAG_MASK	(LE_LEN_SIZE - 1)
 #define LE_LEN_MASK		(~LE_FLAG_MASK)
 
@@ -104,6 +103,18 @@ static inline int le_cmp(struct log_entry *a, struct log_entry *b) {
 	} else return 1;
 }
 
+struct tran_stat {
+	unsigned long merg_size;
+	unsigned long staleness;
+	unsigned long length;
+};
+
+#define init_stat(stat) do {    \
+	stat.merg_size = 0;	\
+	stat.staleness = 0;	\
+	stat.length = 0;	\
+} while(0)
+
 struct transaction {
     struct tran_stat stat;
     struct list_head list;
@@ -135,16 +146,23 @@ static inline struct transaction *new_tran(void) {
 
 struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
-    unsigned int l_begin; // begin of prepared entries
-    unsigned int l_head; // begin of active entries
+    atomic_t l_begin;
     atomic_t l_end;
+
+    unsigned int l_head; // begin of active entries
     struct list_head l_trans;
-    spinlock_t l_lock; // to protect the prepared entries
+    spinlock_t l_lock; /* protects l_head, and l_trans */
+
     struct kobject l_kobj;
     struct completion l_kobj_unregister;
 };
 
-#define L_END(log) (atomic_read(&(log)->l_end))
+#define l_begin(log)        ((unsigned int)atomic_read(&(log)->l_begin))
+#define l_set_begin(log, i) (atomic_set(&(log)->l_begin, i))
+#define l_end(log)          ((unsigned int)atomic_read(&(log)->l_end))
+#define l_set_end(log, i)   (atomic_set(&(log)->l_end, i))
+#define l_inc_end(log)      ((unsigned int)atomic_inc_return(&(log)->l_end))
+
 #define L_ENT(log, i) ((log)->l_entries + L_INDEX(i))
 
 #define __log_add_tran(log, tran)	\
@@ -155,9 +173,10 @@ struct adafs_log {
 
 static inline void log_init(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
-    log->l_begin = 0;
+    l_set_begin(log, 0);
+    l_set_end(log, 0);
+
     log->l_head = 0;
-    atomic_set(&log->l_end, 0);
     INIT_LIST_HEAD(&log->l_trans);
     spin_lock_init(&log->l_lock);
     __log_add_tran(log, tran);
@@ -171,8 +190,6 @@ extern int log_flush(struct adafs_log *log, unsigned int nr);
 static inline void log_destroy(struct adafs_log *log) {
 	struct transaction *pos, *tmp;
 
-	log_flush(log, UINT_MAX);
-
 	list_for_each_entry_safe(pos, tmp, &log->l_trans, list) {
 		kmem_cache_free(adafs_tran_cachep, pos);
 	}
@@ -183,14 +200,17 @@ static inline void log_destroy(struct adafs_log *log) {
 
 static inline void __log_seal(struct adafs_log *log) {
 	struct transaction *tran = __log_tail_tran(log);
-    unsigned int end = L_END(log);
+	unsigned int begin;
+    unsigned int end = l_end(log);
     if (log->l_head == end) {
         PRINT(WARNING "[adafs] nothing to seal: %u-%u-%u\n",
-                log->l_begin, log->l_head, end);
+                l_begin(log), log->l_head, l_end(log));
         return;
     }
-    if (L_DIST(log->l_begin, end) > LOG_LEN) {
-        end = log->l_begin + LOG_LEN;
+
+    begin = l_begin(log);
+    if (seq_dist(begin, end) > LOG_LEN) {
+        end = begin + LOG_LEN;
     }
 
     tran->begin = log->l_head;
@@ -207,12 +227,12 @@ static inline void log_seal(struct adafs_log *log) {
     spin_unlock(&log->l_lock);
 }
 
-static inline int log_append(struct adafs_log *log, struct log_entry *entry,
-        unsigned int *enti) {
+static inline int log_append(struct adafs_log *log, struct log_entry *le,
+        unsigned int *le_seq) {
     int err;
-    unsigned int tail = (unsigned int)atomic_inc_return(&log->l_end) - 1;
+    unsigned int tail = l_inc_end(log) - 1;
 
-    while (L_DIST(log->l_begin, tail) >= LOG_LEN) {
+    while (seq_dist(l_begin(log), tail) >= LOG_LEN) {
         err = log_flush(log, 1);
         if (err == -ENODATA) {
             log_seal(log);
@@ -220,18 +240,18 @@ static inline int log_append(struct adafs_log *log, struct log_entry *entry,
         }
         if (err) {
             PRINT("[Err%d] log failed to append: inode no. = %lu, page index = %lu\n",
-                    err, le_ino(entry), le_pgi(entry));
+                    err, le_ino(le), le_pgi(le));
             spin_unlock(&log->l_lock);
             return err;
         }
     }
-    *L_ENT(log, tail) = *entry;
-    if (likely(enti)) *enti = tail;
-    ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(entry));
+    *L_ENT(log, tail) = *le;
+    if (likely(le_seq)) *le_seq = tail;
+    ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
     return 0;
 }
 
-static inline unsigned long __log_staleness_sum(struct adafs_log *log) {
+static inline unsigned long __log_stal_sum(struct adafs_log *log) {
     unsigned long sum = 0;
     struct transaction *tran;
     list_for_each_entry(tran, &log->l_trans, list) {
@@ -240,15 +260,15 @@ static inline unsigned long __log_staleness_sum(struct adafs_log *log) {
     return sum;
 }
 
-static inline unsigned long log_staleness_sum(struct adafs_log *log) {
+static inline unsigned long log_stal_sum(struct adafs_log *log) {
     unsigned long sum;
     spin_lock(&log->l_lock);
-    sum = __log_staleness_sum(log);
+    sum = __log_stal_sum(log);
     spin_unlock(&log->l_lock);
     return sum;
 }
 
-extern int __log_sort(struct adafs_log *log, int begin, int end);
+extern int __log_sort(struct adafs_log *log, unsigned int begin, unsigned int end);
 
 struct flush_operations {
 	handle_t *(*trans_begin)(int nent, void *data);

@@ -16,6 +16,7 @@
 
 #include "ada_log.h"
 #include "ada_rlog.h"
+#include "ada_policy.h"
 
 #define MAX_LOG_NUM 20
 #define RLOG_HASH_BITS 10
@@ -66,7 +67,7 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 #ifdef DEBUG_PRP
         printk(KERN_DEBUG "[adafs] NP 1: %p\n", rl_page(rl));
 #endif
-	} else if (L_LESS(rl_enti(rl), log->l_head)) { // COW
+	} else if (seq_less(rl_enti(rl), log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
 		void *vfrom, *vto;
 		struct log_entry *le;
@@ -106,7 +107,7 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 
 	BUG_ON(li > MAX_LOG_NUM);
 
-	if (rl_enti(rl) != L_NULL && L_NG(log->l_head, rl_enti(rl))) { // active page
+	if (rl_enti(rl) != L_NULL && seq_ng(log->l_head, rl_enti(rl))) { // active page
 		le_set_len(L_ENT(log, rl_enti(rl)), offset + copied);
 #ifdef DEBUG_PRP
 		printk(KERN_DEBUG "[adafs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
@@ -160,12 +161,13 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	end = (lend >> PAGE_CACHE_SHIFT);
 
 	spin_lock(&log->l_lock);
-	for (i = L_END(log) - 1;
-			L_NG(log->l_begin, i); --i) {
+	for (i = l_end(log) - 1;
+			seq_ng(l_begin(log), i); --i) {
 		le = L_ENT(log, i);
 		if (le_inval(le) || le_ino(le) != inode->i_ino)
 			continue;
 		if (le_meta(le)) {
+			le_set_inval(le);
 			ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() breaks at %u\n", i);
 			break;
 		}

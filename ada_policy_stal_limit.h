@@ -9,9 +9,23 @@
 #ifndef ADAFS_POLICY_H_
 #define ADAFS_POLICY_H_
 
-#include "ada_policy_util.h"
+#include "ada_log.h"
 
-#define ADAFS_TRAN_LIMIT 16128 // in blocks, 63 MB
+#define print_stat(info, log, stat) \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
+				(int)((log) - adafs_logs), info, \
+				(stat)->staleness, (stat)->merg_size, (stat)->length)
+
+extern unsigned int stal_limit_blocks;
+
+#ifdef ADA_RELEASE
+#define print_stat(info, log, stat)
+#else
+#define print_stat(info, log, stat) \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
+				(int)((log) - adafs_logs), info, \
+				(stat)->staleness, (stat)->merg_size, (stat)->length)
+#endif
 
 #define on_write_old_page(log, size) do { \
 		struct tran_stat *sp, stat; \
@@ -22,8 +36,7 @@
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write old", log, &stat); \
-		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
-			/* TODO: little chance for race if not protected */ \
+		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
 			wake_up_process(adafs_flusher); \
 		} } while (0)
@@ -37,8 +50,7 @@
 		stat = *sp; \
 		spin_unlock(&(log)->l_lock); \
 		print_stat("on write new", log, &stat); \
-		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
-			/* TODO: little chance for race if not protected */ \
+		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
 			wake_up_process(adafs_flusher); \
 		} } while (0)
