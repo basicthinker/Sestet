@@ -29,12 +29,12 @@ extern unsigned int stal_limit_blocks;
 
 #define on_write_old_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->merg_size += size; \
 		sp->staleness += size; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on write old", log, &stat); \
 		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
@@ -43,12 +43,12 @@ extern unsigned int stal_limit_blocks;
 
 #define on_write_new_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->staleness += size; \
 		sp->length += 1; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on write new", log, &stat); \
 		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
@@ -57,13 +57,13 @@ extern unsigned int stal_limit_blocks;
 
 #define on_evict_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->staleness += 1; \
 		sp->merg_size += (size); \
 		sp->length -= 1; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on evict page", log, &stat); \
 		} while (0)
 

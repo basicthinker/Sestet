@@ -142,16 +142,25 @@ static inline struct transaction *new_tran(void) {
 	return tran;
 }
 
+static inline void evict_tran(struct transaction *tran) {
+#ifdef __KERNEL__
+        kmem_cache_free(adafs_tran_cachep, tran);
+#else
+        free(tran);
+#endif
+}
+
 #define is_tran_open(tran) ((tran)->begin == (tran)->end)
 
 struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
     atomic_t l_begin;
     atomic_t l_end;
+    spinlock_t l_flock; /* protects l_begin and flushing */
 
     unsigned int l_head; // begin of active entries
     struct list_head l_trans;
-    spinlock_t l_lock; /* protects l_head, and l_trans */
+    spinlock_t l_tlock; /* protects l_head, and l_trans */
 
     struct kobject l_kobj;
     struct completion l_kobj_unregister;
@@ -175,10 +184,11 @@ static inline void log_init(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
     l_set_begin(log, 0);
     l_set_end(log, 0);
+    spin_lock_init(&log->l_flock);
 
     log->l_head = 0;
     INIT_LIST_HEAD(&log->l_trans);
-    spin_lock_init(&log->l_lock);
+    spin_lock_init(&log->l_tlock);
     __log_add_tran(log, tran);
 
     log->l_kobj.kset = adafs_kset;
@@ -221,30 +231,25 @@ static inline void __log_seal(struct adafs_log *log) {
 static inline void log_seal(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
 
-    spin_lock(&log->l_lock);
+    spin_lock(&log->l_tlock);
     __log_seal(log);
     __log_add_tran(log, tran);
-    spin_unlock(&log->l_lock);
+    spin_unlock(&log->l_tlock);
 }
 
 static inline int log_append(struct adafs_log *log, struct log_entry *le,
         unsigned int *le_seq) {
-    int err;
     unsigned int tail = l_inc_end(log) - 1;
 
-    while (seq_dist(l_begin(log), tail) >= LOG_LEN) {
-        err = log_flush(log, 1);
-        if (err == -ENODATA) {
-            log_seal(log);
-            err = log_flush(log, 1);
-        }
-        if (err) {
-            PRINT("[Err%d] log failed to append: inode no. = %lu, page index = %lu\n",
-                    err, le_ino(le), le_pgi(le));
-            spin_unlock(&log->l_lock);
-            return err;
-        }
+    if (seq_dist(l_begin(log), tail) >= LOG_LEN) {
+        PRINT("[adafs] log_append() failed: ino = %lu, pgi = %lu\n",
+                    le_ino(le), le_pgi(le));
+        return -EAGAIN;
     }
+    /*
+     * There is little chance that the entry is being flushed
+     *  -- flash writing hardly catches up, thus we do not protect this region.
+     */
     *L_ENT(log, tail) = *le;
     if (likely(le_seq)) *le_seq = tail;
     ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
@@ -262,9 +267,9 @@ static inline unsigned long __log_stal_sum(struct adafs_log *log) {
 
 static inline unsigned long log_stal_sum(struct adafs_log *log) {
     unsigned long sum;
-    spin_lock(&log->l_lock);
+    spin_lock(&log->l_tlock);
     sum = __log_stal_sum(log);
-    spin_unlock(&log->l_lock);
+    spin_unlock(&log->l_tlock);
     return sum;
 }
 

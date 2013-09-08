@@ -135,7 +135,7 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 #define le_for_each(le, i, begin, end) \
 		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
 
-static int merge_flush(struct log_entry entries[],
+static int __merge_flush(struct log_entry entries[],
 		const unsigned int begin, const unsigned int end) {
 	struct log_entry *le;
 	handle_t *handle;
@@ -197,35 +197,30 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
     struct log_entry *entries = log->l_entries;
     struct transaction *tran;
 
-    spin_lock(&log->l_lock);
-    begin = end = l_begin(log);
+    spin_lock(&log->l_tlock);
+    tran = list_first_entry(&log->l_trans, struct transaction, list);
+    begin = end = tran->begin;
     while (nr) {
-        tran = list_first_entry(&log->l_trans, struct transaction, list);
         if (is_tran_open(tran)) break;
         ADAFS_BUG_ON(tran->begin != end);
         end = tran->end;
         list_del(&tran->list);
-#ifdef __KERNEL__
-        kmem_cache_free(adafs_tran_cachep, tran);
-#else
-        free(tran);
-#endif
+        evict_tran(tran);
+        tran = list_first_entry(&log->l_trans, struct transaction, list);
         --nr;
     }
-    l_set_begin(log, end);
-    spin_unlock(&log->l_lock);
+    spin_unlock(&log->l_tlock);
     if (begin == end) {
     	PRINT(WARNING "[adafs] No transaction flushed: l_begin = %u\n", begin);
         return -ENODATA;
     }
 
-    err = __log_sort(log, begin, end);
-    if (err) {
-        PRINT(ERR "[adafs] log@%p - __log_sort(%u, %u) failed: %d.\n",
-                log, begin, end, err);
-        return err;
-    }
-    return merge_flush(entries, begin, end);
+    spin_lock(&log->l_flock);
+    __log_sort(log, begin, end);
+    err = __merge_flush(entries, begin, end);
+    l_set_begin(log, end);
+    spin_unlock(&log->l_flock);
+    return err;
 }
 
 

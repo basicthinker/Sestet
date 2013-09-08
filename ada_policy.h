@@ -12,69 +12,52 @@
 #define ADAFS_TRAN_LIMIT 256 // in blocks
 extern unsigned int stal_limit_blocks;
 
-struct tran_stat {
-	unsigned long merg_size;
-	unsigned long staleness;
-	unsigned long length;
-};
-
-#define init_stat(stat) do {    \
-	stat.merg_size = 0;	\
-	stat.staleness = 0;	\
-	stat.length = 0;	\
-} while(0)
-
-#define opt_ratio(tran_stat)	\
-	((float)tran_stat.merg_size/tran_stat.staleness)
-#define ls_ratio(tran_stat)	\
-	((float)tran_stat.length/tran_stat.staleness)
+#include "ada_log.h"
 
 #define print_stat(info, log, stat) \
-		printk(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
 				(int)((log) - adafs_logs), info, \
 				(stat)->staleness, (stat)->merg_size, (stat)->length)
 
 #define on_write_old_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->merg_size += size; \
 		sp->staleness += size; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on write old", log, &stat); \
-		if (stat.staleness >= TRAN_LIMIT) { \
-			/* TODO: little chance for race if not protected */ \
+		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= stal_limit_blocks) \
+			if (seq_dist(l_begin(log), l_end(log)) >= stal_limit_blocks) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 
 #define on_write_new_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->staleness += size; \
 		sp->length += 1; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on write new", log, &stat); \
-		if (stat.staleness >= TRAN_LIMIT) { \
-			/* TODO: little chance for race if not protected */ \
+		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
-			if (L_DIST((log)->l_begin, (log)->l_head) >= stal_limit_blocks) \
+			if (seq_dist(l_begin(log), l_end(log)) >= stal_limit_blocks) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 
 #define on_evict_page(log, size) do { \
 		struct tran_stat *sp, stat; \
-		spin_lock(&(log)->l_lock); \
+		spin_lock(&(log)->l_tlock); \
 		sp = &__log_tail_tran(log)->stat; \
 		sp->staleness += 1; \
 		sp->merg_size += (size); \
 		sp->length -= 1; \
 		stat = *sp; \
-		spin_unlock(&(log)->l_lock); \
+		spin_unlock(&(log)->l_tlock); \
 		print_stat("on evict page", log, &stat); \
 		} while (0)
 
