@@ -101,7 +101,7 @@ void adafs_exit_hook(void)
 			++i;
 		}
 		if (--j == 0) {
-			ADAFS_TRACE(INFO "[adafs] adafs_exit_hook: evicted rlogs num=%d\n", i);
+			printk(KERN_INFO "[adafs] adafs_exit_hook: evicted rlogs num=%d\n", i);
 			i = 0;
 			j = (1 << (RLOG_HASH_BITS - 3));
 		}
@@ -110,6 +110,7 @@ void adafs_exit_hook(void)
 
 	for (i = 0; i < atomic_read(&num_logs); ++i) {
 		log_destroy(adafs_logs[i]);
+		kfree(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
 }
