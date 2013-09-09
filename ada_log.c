@@ -149,7 +149,7 @@ static int __merge_flush(struct log_entry entries[],
 	handle_t *handle;
 	struct super_block *sb;
 	unsigned int b, e, i, n;
-	int err;
+	int err = 0;
 	unsigned long ino;
 
 	for (b = begin; seq_less(b, end); b = e) {
@@ -165,14 +165,14 @@ static int __merge_flush(struct log_entry entries[],
 		} else { // to flush a group of entries
 			le = &entry(b);
 			ino = le_ino(le);
-			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] get sb from page: " LE_DUMP_PAGE(le));
+			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: " LE_DUMP_PAGE(le));
 					sb = le_page(le)->mapping->host->i_sb;
 
 			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
-					ADAFS_DEBUG(INFO "[adafs] merge_flush() invalidates entry: "
+					ADAFS_DEBUG(INFO "[adafs] __merge_flush() invalidates entry: "
 							LE_DUMP(&entry(i - 1)));
 					le_set_inval(&entry(i - 1));
 
@@ -181,8 +181,8 @@ static int __merge_flush(struct log_entry entries[],
 				} else ++n;
 			} // for
 			e = i;
-			PRINT("[adafs] merge_flush() begins flushing:"
-					" begin=%u, end=%u, num=%u\n", b, e, n);
+			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
+					"begin=%u, end=%u, num=%u\n", ino, b, e, n);
 			handle = do_trans_begin(n, sb);
 			ADAFS_BUG_ON(IS_ERR(handle));
 
@@ -196,7 +196,7 @@ static int __merge_flush(struct log_entry entries[],
 			ADAFS_BUG_ON(err);
 		}
 	} // for all target entries
-	return 0;
+	return err;
 }
 
 int log_flush(struct adafs_log *log, unsigned int nr) {
@@ -226,7 +226,7 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
     mutex_lock(&log->l_fmutex);
     __log_sort(log, begin, end);
     err = __merge_flush(entries, begin, end);
-    l_set_begin(log, end);
+    log->l_begin = end;
     mutex_unlock(&log->l_fmutex);
     return err;
 }
@@ -247,8 +247,8 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
 	if (kstrtoul(buf, 0, &req_sum) || req_sum != 0)
 		return -EINVAL;
 
-	log_seal(log);
 	wake_up_process(adafs_flusher);
+	wait_for_completion_timeout(&log->l_fcmpl, HZ);
     return len;
 }
 

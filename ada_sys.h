@@ -52,18 +52,18 @@
     #define PAGE_CACHE_MASK     (~(PAGE_CACHE_SIZE - 1))
 #endif
 
-#ifndef ADA_RELEASE
-	#define ADAFS_TRACE(...)    PRINT(__VA_ARGS__)
-#else
+#ifdef ADA_RELEASE
 	#define ADAFS_TRACE(...)
+#else
+	#define ADAFS_TRACE(...)    PRINT(__VA_ARGS__)
 #endif
 
-#if defined(__KERNEL__) && defined(ADA_DEBUG)
+#ifdef ADA_DEBUG
     #define ADAFS_DEBUG(...)    PRINT(__VA_ARGS__)
-    #define ADAFS_BUG_ON(...)   BUG_ON(__VA_ARGS__)
 #else
     #define ADAFS_DEBUG(...)
-    #define ADAFS_BUG_ON(...)
 #endif
+
+#define ADAFS_BUG_ON(...)   BUG_ON(__VA_ARGS__)
 
 #endif // ADAFS_SYS_H_

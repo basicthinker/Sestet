@@ -14,10 +14,13 @@ extern unsigned int stal_limit_blocks;
 
 #include "ada_log.h"
 
-#define print_stat(info, log, stat) \
-		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
-				(int)((log) - adafs_logs), info, \
-				(stat)->staleness, (stat)->merg_size, (stat)->length)
+#ifdef ADA_RELEASE
+#define print_stat(info, log, stat)
+#else
+#define print_stat(info, stat) \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] %s: staleness=%lu, merged=%lu, len=%lu\n", \
+				info, (stat)->staleness, (stat)->merg_size, (stat)->length)
+#endif
 
 #define on_write_old_page(log, size) do { \
 		struct tran_stat *sp, stat; \
@@ -30,7 +33,7 @@ extern unsigned int stal_limit_blocks;
 		print_stat("on write old", log, &stat); \
 		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
-			if (seq_dist(l_begin(log), l_end(log)) >= stal_limit_blocks) \
+			if (seq_dist(log->l_begin, log->l_end) >= stal_limit_blocks) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 
@@ -45,7 +48,7 @@ extern unsigned int stal_limit_blocks;
 		print_stat("on write new", log, &stat); \
 		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
-			if (seq_dist(l_begin(log), l_end(log)) >= stal_limit_blocks) \
+			if (seq_dist(log->l_begin, log->l_end) >= stal_limit_blocks) \
 				wake_up_process(adafs_flusher); \
 		} } while (0)
 

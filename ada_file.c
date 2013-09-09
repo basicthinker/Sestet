@@ -19,7 +19,7 @@
 #include "ada_fs.h"
 #include "ada_policy.h"
 
-struct adafs_log adafs_logs[MAX_LOG_NUM];
+struct adafs_log *adafs_logs[MAX_LOG_NUM];
 static atomic_t num_logs;
 
 struct kmem_cache *adafs_rlog_cachep;
@@ -32,9 +32,16 @@ struct task_struct *adafs_flusher;
 int adafs_flush(void *data)
 {
 	int i;
+	struct adafs_log *log;
 	while (!kthread_should_stop()) {
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
-			log_flush(adafs_logs + i, UINT_MAX);
+			log = adafs_logs[i];
+			INIT_COMPLETION(log->l_fcmpl);
+			while (log_flush(log, UINT_MAX) == -ENODATA &&
+					log->l_head != log->l_end) {
+				log_seal(log);
+			}
+			complete_all(&log->l_fcmpl);
 		}
 
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -58,9 +65,9 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 	adafs_kset = kset;
 
 	atomic_set(&num_logs, 1);
-	log_init(&adafs_logs[0]);
+	adafs_logs[0] = new_log();
 
-	err = kobject_init_and_add(&adafs_logs[0].l_kobj, &adafs_la_ktype, NULL,
+	err = kobject_init_and_add(&adafs_logs[0]->l_kobj, &adafs_la_ktype, NULL,
 	            "log%d", 0);
 	if (err) printk(KERN_ERR "[adafs] kobject_init_and_add() failed for log0\n");
 
@@ -102,7 +109,7 @@ void adafs_exit_hook(void)
 	kmem_cache_destroy(adafs_rlog_cachep);
 
 	for (i = 0; i < atomic_read(&num_logs); ++i) {
-		log_destroy(adafs_logs + i);
+		log_destroy(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
 }

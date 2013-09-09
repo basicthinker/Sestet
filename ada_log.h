@@ -153,23 +153,18 @@ static inline void evict_tran(struct transaction *tran) {
 
 struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
-    atomic_t l_begin;
-    atomic_t l_end;
+    unsigned int l_begin;
     struct mutex l_fmutex;  /* protects l_begin and flushing */
+    struct completion l_fcmpl;
 
     unsigned int l_head;    /* begin of active entries */
+    unsigned int l_end;
     struct list_head l_trans;
-    spinlock_t l_tlock;     /* protects l_head, and l_trans */
+    spinlock_t l_tlock;     /* protects l_head, l_end, and l_trans */
 
     struct kobject l_kobj;
     struct completion l_kobj_unregister;
 };
-
-#define l_begin(log)        ((unsigned int)atomic_read(&(log)->l_begin))
-#define l_set_begin(log, i) (atomic_set(&(log)->l_begin, i))
-#define l_end(log)          ((unsigned int)atomic_read(&(log)->l_end))
-#define l_set_end(log, i)   (atomic_set(&(log)->l_end, i))
-#define l_inc_end(log)      ((unsigned int)atomic_inc_return(&(log)->l_end))
 
 #define L_ENT(log, i) ((log)->l_entries + L_INDEX(i))
 
@@ -181,9 +176,10 @@ struct adafs_log {
 
 static inline void log_init(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
-    l_set_begin(log, 0);
-    l_set_end(log, 0);
+    log->l_begin = 0;
+    log->l_end = 0;
     mutex_init(&log->l_fmutex);
+	init_completion(&log->l_fcmpl);
 
     log->l_head = 0;
     INIT_LIST_HEAD(&log->l_trans);
@@ -192,6 +188,18 @@ static inline void log_init(struct adafs_log *log) {
 
     log->l_kobj.kset = adafs_kset;
     init_completion(&log->l_kobj_unregister);
+}
+
+static inline struct adafs_log *new_log(void)
+{
+	struct adafs_log *log;
+#ifdef __KERNEL__
+	log = (struct adafs_log *)kmalloc(sizeof(struct adafs_log), GFP_KERNEL);
+#else
+	log = (struct adafs_log *)malloc(sizeof(struct adafs_log));
+#endif
+	log_init(log);
+	return log;
 }
 
 extern int log_flush(struct adafs_log *log, unsigned int nr);
@@ -209,58 +217,40 @@ static inline void log_destroy(struct adafs_log *log) {
 
 static inline int __log_seal(struct adafs_log *log) {
 	struct transaction *tran = __log_tail_tran(log);
-	unsigned int begin;
-    unsigned int end = l_end(log);
-    if (log->l_head == end) {
+
+    if (log->l_head == log->l_end) {
         return -ENODATA;
     }
 
-    begin = l_begin(log);
-    if (seq_dist(begin, end) > LOG_LEN) {
-        end = begin + LOG_LEN;
-    }
-
     tran->begin = log->l_head;
-    tran->end = end;
+    tran->end = log->l_end;
     log->l_head = tran->end;
     return 0;
 }
 
 static inline void log_seal(struct adafs_log *log) {
+	struct transaction *tran = new_tran();
 	int err;
     spin_lock(&log->l_tlock);
     err = __log_seal(log);
+    if (!err) __log_add_tran(log, tran);
     spin_unlock(&log->l_tlock);
-	if (!err) {
-		struct transaction *tran = new_tran();
-		__log_add_tran(log, tran);
-	}
+	if (err) evict_tran(tran);
 }
 
 static inline int log_append(struct adafs_log *log, struct log_entry *le,
 		unsigned int *le_seq)
 {
-	unsigned int tail = l_end(log);
-	short n = 0;
-
-	if (unlikely(seq_dist(l_begin(log), tail) >= LOG_LEN))
-		return -EAGAIN;
-
-	tail = l_inc_end(log) - 1;
-	while (seq_dist(l_begin(log), tail) >= LOG_LEN) {
-		if (++n == 0)
-			ADAFS_DEBUG("[adafs] log_append() stalls: ino = %lu, pgi = %lu\n",
-					le_ino(le), le_pgi(le));
-	}
-
-	/*
-	 * There is little chance that the entry is being flushed
-	 *  -- flash writing hardly catches up, thus we do not protect this region.
-	 */
-	*L_ENT(log, tail) = *le;
-	if (likely(le_seq)) *le_seq = tail;
-	ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
-	return 0;
+	int err = 0;
+	spin_lock(&log->l_tlock);
+	if (seq_dist(log->l_begin, log->l_end) < LOG_LEN) {
+		*L_ENT(log, log->l_end) = *le;
+		if (likely(le_seq)) *le_seq = log->l_end;
+		ADAFS_DEBUG(INFO "[adafs] log_append(): " LE_DUMP(le));
+		++log->l_end;
+	} else err = -EAGAIN;
+	spin_unlock(&log->l_tlock);
+	return err;
 }
 
 static inline unsigned long __log_stal_sum(struct adafs_log *log) {

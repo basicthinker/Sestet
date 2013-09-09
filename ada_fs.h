@@ -18,11 +18,11 @@
 #include "ada_rlog.h"
 #include "ada_policy.h"
 
-#define MAX_LOG_NUM 20
+#define MAX_LOG_NUM 16
 #define RLOG_HASH_BITS 10
 
 struct kiocb;
-extern struct adafs_log adafs_logs[MAX_LOG_NUM];
+extern struct adafs_log *adafs_logs[MAX_LOG_NUM];
 extern struct task_struct *adafs_flusher;
 extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
@@ -43,12 +43,13 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 
 	if (S_ISREG(mode)) {
 		struct log_entry le = LE_INITIALIZER;
-		struct adafs_log *log = adafs_logs + (unsigned int)(long)new_inode->i_private;
+		struct adafs_log *log = adafs_logs[(long)new_inode->i_private];
 		le_set_ino(&le, new_inode->i_ino);
 		le_set_meta(&le);
-		while (log_append(log, &le, NULL)) {
+		while (log_append(log, &le, NULL) == -EAGAIN) {
 			log_seal(log);
 			wake_up_process(adafs_flusher);
+			wait_for_completion(&log->l_fcmpl);
 		}
 	}
 }
@@ -58,7 +59,7 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 {
 	struct rlog *rl;
 	unsigned int li = (unsigned int)(long)host->i_private;
-	struct adafs_log *log = adafs_logs + li;
+	struct adafs_log *log = adafs_logs[li];
 
 	BUG_ON(li > MAX_LOG_NUM);
 
@@ -106,7 +107,7 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 {
 	int err = 0;
 	unsigned int li = (unsigned int)(long)host->i_private;
-	struct adafs_log *log = adafs_logs + li;
+	struct adafs_log *log = adafs_logs[li];
 
 	BUG_ON(li > MAX_LOG_NUM);
 
@@ -117,7 +118,7 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 #endif
 		on_write_old_page(log, copied);
 	} else {
-		unsigned int ei, pgv;
+		unsigned int ei = L_NULL, pgv;
 		struct log_entry le = LE_INITIALIZER;
 
 		le_set_ino(&le, host->i_ino);
@@ -134,9 +135,10 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 #ifdef DEBUG_PRP
 		else printk(KERN_DEBUG "[adafs] NP 2: %p\n", rl_page(rl));
 #endif
-		while (log_append(log, &le, &ei)) {
+		while (log_append(log, &le, &ei) == -EAGAIN) {
 			log_seal(log);
 			wake_up_process(adafs_flusher);
+			wait_for_completion(&log->l_fcmpl);
 		}
 		rl_set_enti(rl, ei);
 
@@ -149,7 +151,7 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 static inline void adafs_truncate_hook(struct inode *inode,
 		loff_t lstart, loff_t lend)
 {
-	struct adafs_log *log = adafs_logs + (unsigned int)(long)inode->i_private;
+	struct adafs_log *log = adafs_logs[(long)inode->i_private];
 	struct address_space *mapping = inode->i_mapping;
 	unsigned int i;
 	struct pagevec pvec;
@@ -166,8 +168,8 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	end = (lend >> PAGE_CACHE_SHIFT);
 
 	mutex_lock(&log->l_fmutex);
-	for (i = l_end(log) - 1;
-			seq_ng(l_begin(log), i); --i) {
+	for (i = log->l_end - 1;
+			seq_ng(log->l_begin, i); --i) {
 		le = L_ENT(log, i);
 		if (le_inval(le) || le_ino(le) != inode->i_ino)
 			continue;

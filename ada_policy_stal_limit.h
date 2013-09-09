@@ -11,20 +11,14 @@
 
 #include "ada_log.h"
 
-#define print_stat(info, log, stat) \
-		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
-				(int)((log) - adafs_logs), info, \
-				(stat)->staleness, (stat)->merg_size, (stat)->length)
-
 extern unsigned int stal_limit_blocks;
 
 #ifdef ADA_RELEASE
 #define print_stat(info, log, stat)
 #else
-#define print_stat(info, log, stat) \
-		ADAFS_TRACE(KERN_INFO "[adafs-stat] log(%d) %s: staleness=%lu, merged=%lu, len=%lu\n", \
-				(int)((log) - adafs_logs), info, \
-				(stat)->staleness, (stat)->merg_size, (stat)->length)
+#define print_stat(info, stat) \
+		ADAFS_TRACE(KERN_INFO "[adafs-stat] %s: staleness=%lu, merged=%lu, len=%lu\n", \
+				info, (stat)->staleness, (stat)->merg_size, (stat)->length)
 #endif
 
 #define on_write_old_page(log, size) do { \
@@ -35,7 +29,7 @@ extern unsigned int stal_limit_blocks;
 		sp->staleness += size; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on write old", log, &stat); \
+		print_stat("on write old", &stat); \
 		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
 			wake_up_process(adafs_flusher); \
@@ -49,7 +43,7 @@ extern unsigned int stal_limit_blocks;
 		sp->length += 1; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on write new", log, &stat); \
+		print_stat("on write new", &stat); \
 		if (stat.staleness >= (stal_limit_blocks << PAGE_CACHE_SHIFT)) { \
 			log_seal(log); \
 			wake_up_process(adafs_flusher); \
@@ -64,7 +58,7 @@ extern unsigned int stal_limit_blocks;
 		sp->length -= 1; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on evict page", log, &stat); \
+		print_stat("on evict page", &stat); \
 		} while (0)
 
 #endif /* ADAFS_POLICY_H_ */
