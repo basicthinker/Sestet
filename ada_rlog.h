@@ -11,12 +11,15 @@
 
 #include <linux/hash.h>
 #include "shashtable.h"
+#include "ada_log.h"
 
 struct rlog {
 	struct hlist_node rl_hnode;
 	struct page *rl_page;
 	unsigned int rl_enti;
 };
+
+extern struct kmem_cache *adafs_rlog_cachep;
 
 #define rlog_malloc() \
 		((struct rlog *)kmem_cache_alloc(adafs_rlog_cachep, GFP_KERNEL))
@@ -52,5 +55,13 @@ struct rlog {
 		ADAFS_DEBUG(INFO "[adafs] evict_rlog(): " RL_DUMP(rl)); \
 		put_page((rl)->rl_page); \
 		rlog_free(rl); }
+
+static inline void evict_entry(struct log_entry *le, struct shashtable *page_rlog)
+{
+	struct rlog *rl;
+	rl = find_rlog(page_rlog, le_page(le));
+	ADAFS_BUG_ON(!rl);
+	evict_rlog(rl);
+}
 
 #endif /* ADAFS_RLOG_H_ */

@@ -154,7 +154,6 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	struct adafs_log *log = adafs_logs[(long)inode->i_private];
 	unsigned int i;
 	pgoff_t start, end;
-	struct rlog *rl;
 	struct log_entry *le;
 
 	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, start=%lu, end=%lu\n",
@@ -177,9 +176,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 		}
 		if (le_pgi(le) >= start && le_pgi(le) <= end) {
 			le_set_inval(le);
-			rl = find_rlog(page_rlog, le_page(le));
-			ADAFS_BUG_ON(!rl);
-			evict_rlog(rl);
+			evict_entry(le, page_rlog);
 			on_evict_page(log, le_len(le));
 		}
 	}

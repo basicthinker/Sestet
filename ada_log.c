@@ -125,13 +125,6 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
-#define le_evict_rlog(le) do { \
-		struct rlog *rl; \
-		ADAFS_BUG_ON(le_meta(le) || le_inval(le)); \
-		rl = find_rlog(page_rlog, le_page(le)); \
-		ADAFS_BUG_ON(!rl); \
-		evict_rlog(rl); } while (0)
-
 #define le_for_each(le, i, begin, end) \
 		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
 
@@ -147,25 +140,23 @@ static int __merge_flush(struct log_entry entries[],
 	for (b = begin; seq_less(b, end); b = e) {
 		le = &entry(b);
 		if (unlikely(le_inval(le))) {
-			ADAFS_BUG_ON(i != end);
 			break;
 		} else if (le_meta(le)) {
 			e = b + 1;
 		} else { // to flush a group of entries
 			le = &entry(b);
 			ino = le_ino(le);
-			le_evict_rlog(le);
 			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: " LE_DUMP_PAGE(le));
 					sb = le_page(le)->mapping->host->i_sb;
 
 			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
-				le_evict_rlog(le);
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
 					ADAFS_DEBUG(INFO "[adafs] __merge_flush() invalidates entry: "
 							LE_DUMP(&entry(i - 1)));
 					le_set_inval(&entry(i - 1));
+					evict_entry(&entry(i - 1), page_rlog);
 
 					if (le_len(le) < le_len(&entry(i - 1)))
 						le_set_len(le, le_len(&entry(i - 1)));
@@ -180,6 +171,7 @@ static int __merge_flush(struct log_entry entries[],
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
 		        err = do_ent_flush(handle, le);
+		        evict_entry(le, page_rlog);
 		        ADAFS_BUG_ON(err);
 			}
 			err = do_trans_end(handle, sb);
