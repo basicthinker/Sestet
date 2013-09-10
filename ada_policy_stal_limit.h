@@ -14,7 +14,7 @@
 extern unsigned int stal_limit_blocks;
 
 #ifdef ADA_RELEASE
-#define print_stat(info, log, stat)
+#define print_stat(info, stat)
 #else
 #define print_stat(info, stat) \
 		ADAFS_TRACE(KERN_INFO "[adafs-stat] %s: staleness=%lu, merged=%lu, len=%lu\n", \

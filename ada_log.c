@@ -125,20 +125,12 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 	else return 0;
 }
 
-/*
- * Any entry that is associated with a valid page should have its rlog evicted.
- * Specifically, this include two types:
- * (1) COW entry, whose page is solely kept by AdaFS;
- * (2) Other valid non-COW entry, whose page is in system cache.
- * Note that invalid entries already have their rlogs evicted by
- * the inode eviction hook.
- */
-#define try_evict_rlog(le) do { \
-		if (!le_meta(le) && (le_cow(le) || le_valid(le))) { \
-			struct rlog *rl = find_rlog(page_rlog, le_page(le)); \
-			BUG_ON(!rl); \
-			evict_rlog(rl); \
-		} } while (0)
+#define le_evict_rlog(le) do { \
+		struct rlog *rl; \
+		ADAFS_BUG_ON(le_meta(le) || le_inval(le)); \
+		rl = find_rlog(page_rlog, le_page(le)); \
+		ADAFS_BUG_ON(!rl); \
+		evict_rlog(rl); } while (0)
 
 #define le_for_each(le, i, begin, end) \
 		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
@@ -155,9 +147,6 @@ static int __merge_flush(struct log_entry entries[],
 	for (b = begin; seq_less(b, end); b = e) {
 		le = &entry(b);
 		if (unlikely(le_inval(le))) {
-			le_for_each(le, i, b, end) {
-				try_evict_rlog(le);
-			}
 			ADAFS_BUG_ON(i != end);
 			break;
 		} else if (le_meta(le)) {
@@ -165,12 +154,14 @@ static int __merge_flush(struct log_entry entries[],
 		} else { // to flush a group of entries
 			le = &entry(b);
 			ino = le_ino(le);
+			le_evict_rlog(le);
 			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: " LE_DUMP_PAGE(le));
 					sb = le_page(le)->mapping->host->i_sb;
 
 			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
+				le_evict_rlog(le);
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
 					ADAFS_DEBUG(INFO "[adafs] __merge_flush() invalidates entry: "
 							LE_DUMP(&entry(i - 1)));
@@ -187,7 +178,6 @@ static int __merge_flush(struct log_entry entries[],
 			ADAFS_BUG_ON(IS_ERR(handle));
 
 			le_for_each(le, i, b, e) {
-				try_evict_rlog(le);
 				if (le_inval(le)) continue;
 		        err = do_ent_flush(handle, le);
 		        ADAFS_BUG_ON(err);

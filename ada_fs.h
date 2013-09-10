@@ -152,11 +152,8 @@ static inline void adafs_truncate_hook(struct inode *inode,
 		loff_t lstart, loff_t lend)
 {
 	struct adafs_log *log = adafs_logs[(long)inode->i_private];
-	struct address_space *mapping = inode->i_mapping;
 	unsigned int i;
-	struct pagevec pvec;
-	pgoff_t start, end, next;
-	struct page *page;
+	pgoff_t start, end;
 	struct rlog *rl;
 	struct log_entry *le;
 
@@ -180,28 +177,13 @@ static inline void adafs_truncate_hook(struct inode *inode,
 		}
 		if (le_pgi(le) >= start && le_pgi(le) <= end) {
 			le_set_inval(le);
+			rl = find_rlog(page_rlog, le_page(le));
+			ADAFS_BUG_ON(!rl);
+			evict_rlog(rl);
 			on_evict_page(log, le_len(le));
 		}
 	}
 	mutex_unlock(&log->l_fmutex);
-
-	pagevec_init(&pvec, 0);
-	next = start;
-	while (next <= end && pagevec_lookup(&pvec, mapping, next,
-			min(end - next + 1, (pgoff_t)PAGEVEC_SIZE))) {
-		for (i = 0; i < pagevec_count(&pvec); ++i) {
-			page = pvec.pages[i];
-			next = page->index;
-			if (next > end)
-				break;
-
-			// TODO: check page reference first
-			rl = find_rlog(page_rlog, page);
-			if (rl) evict_rlog(rl);
-		}
-		pagevec_release(&pvec);
-		++next;
-	}
 }
 
 // Put before freeing in-mapping pages
