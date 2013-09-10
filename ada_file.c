@@ -62,10 +62,9 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 		return -ENOMEM;
 
 	sht_init(page_rlog);
-	adafs_kset = kset;
 
 	atomic_set(&num_logs, 1);
-	adafs_logs[0] = new_log();
+	adafs_logs[0] = new_log(kset);
 
 	err = kobject_init_and_add(&adafs_logs[0]->l_kobj, &adafs_la_ktype, NULL,
 	            "log%d", 0);

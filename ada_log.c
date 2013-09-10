@@ -295,6 +295,3 @@ struct kobj_type adafs_la_ktype = {
 	.sysfs_ops		= &adafs_la_ops,
 	.release		= adafs_la_release,
 };
-
-struct kset *adafs_kset;
-

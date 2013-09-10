@@ -25,7 +25,6 @@ typedef int handle_t;
 #include "ada_sys.h"
 
 extern struct flush_operations flush_ops;
-extern struct kset *adafs_kset;
 extern struct kobj_type adafs_la_ktype;
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
@@ -174,7 +173,7 @@ struct adafs_log {
 #define __log_tail_tran(log)	\
 	list_entry((log)->l_trans.prev, struct transaction, list)
 
-static inline void log_init(struct adafs_log *log) {
+static inline void log_init(struct adafs_log *log, struct kset *kset) {
 	struct transaction *tran = new_tran();
     log->l_begin = 0;
     log->l_end = 0;
@@ -186,11 +185,12 @@ static inline void log_init(struct adafs_log *log) {
     spin_lock_init(&log->l_tlock);
     __log_add_tran(log, tran);
 
-    log->l_kobj.kset = adafs_kset;
+    memset(&log->l_kobj, 0, sizeof(struct kobject));
+    log->l_kobj.kset = kset;
     init_completion(&log->l_kobj_unregister);
 }
 
-static inline struct adafs_log *new_log(void)
+static inline struct adafs_log *new_log(struct kset *kset)
 {
 	struct adafs_log *log;
 #ifdef __KERNEL__
@@ -198,7 +198,7 @@ static inline struct adafs_log *new_log(void)
 #else
 	log = (struct adafs_log *)malloc(sizeof(struct adafs_log));
 #endif
-	log_init(log);
+	log_init(log, kset);
 	return log;
 }
 
