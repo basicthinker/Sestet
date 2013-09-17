@@ -30,7 +30,7 @@ extern unsigned int stal_limit_blocks;
 		sp->staleness += size; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on write old", log, &stat); \
+		print_stat("on write old", &stat); \
 		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
 			if (seq_dist(log->l_begin, log->l_end) >= stal_limit_blocks) \
@@ -45,7 +45,7 @@ extern unsigned int stal_limit_blocks;
 		sp->length += 1; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on write new", log, &stat); \
+		print_stat("on write new", &stat); \
 		if (stat.staleness >= ADAFS_TRAN_LIMIT) { \
 			log_seal(log); \
 			if (seq_dist(log->l_begin, log->l_end) >= stal_limit_blocks) \
@@ -61,7 +61,7 @@ extern unsigned int stal_limit_blocks;
 		sp->length -= 1; \
 		stat = *sp; \
 		spin_unlock(&(log)->l_tlock); \
-		print_stat("on evict page", log, &stat); \
+		print_stat("on evict page", &stat); \
 		} while (0)
 
 #endif /* ADAFS_POLICY_H_ */
