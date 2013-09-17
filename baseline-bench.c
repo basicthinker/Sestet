@@ -18,9 +18,7 @@ int main(int argc, char *argv[]) {
   int fd;
   char *data;
   struct timeval tv;
-  double time_init, time_begin, time_end;
-
-  time_init = get_time(&tv);
+  double time_begin, time_end;
 
   if (argc < 4) {
     printf("Usage: %s TargetFile NumPages SleepTime [IsFsync=1]\n", argv[0]);
@@ -41,20 +39,20 @@ int main(int argc, char *argv[]) {
   if (argc == 5) is_fsync = atoi(argv[4]);
   else is_fsync = 1;
 
-  // merge
-  for (i = 0; i < 20; ++i) {
+  sleep(sleep_time);
+  fprintf(stderr, "Test begins...\n");
+
+  for (i = 0; i < 16; ++i) {
+    sleep(sleep_time);
     init_data(data, PAGE_SIZE * num_pages, i + 'a');
+
+    time_begin = get_time(&tv); 
     write(fd, data, PAGE_SIZE * num_pages);
+    if ((i % 2) && is_fsync) fsync(fd);
+    time_end = get_time(&tv);
+    printf("%d\t%.5f\n", is_fsync, time_end - time_begin);
+
     lseek(fd, 0, SEEK_SET);
-
-    if (i % 2) {
-      time_begin = get_time(&tv) - time_init;
-      if (is_fsync) fsync(fd);
-      time_end = get_time(&tv) - time_init;
-
-      printf("%d\t%.5f\t%.5f\n", is_fsync, time_begin, time_end);
-      sleep(sleep_time);
-    }
   }
 
   free(data);
@@ -70,7 +68,7 @@ int main(int argc, char *argv[]) {
  * (2) to flush when length is over 2 * num_pages.
  *
  * 1. Normal run
- *   Check dmesg log: 5 AdaFS flushes, each with num_pages valid entries.
+ *   Check dmesg log: 4 AdaFS flushes, each with num_pages valid entries.
  *   Check data after removal: 't'.
  * 2. Unexpected removal after 5 fsync's (stdout lines)
  *   Check dmesg log: should have 2 adafs flushes.
@@ -78,7 +76,7 @@ int main(int argc, char *argv[]) {
  * 3. Disable fsync and repeat the above.
  *
  * A typical configuration:
- * for totally 80 MB normal Ext4 writes, num_pages = 2048,
+ * for 8 MB each write, num_pages = 2048,
  * AdaFS transaction limit = 16777216, staleness limit = 4096.
 */
 
