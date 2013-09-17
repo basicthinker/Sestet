@@ -2664,6 +2664,8 @@ static int ext4_writepage(struct page *page,
 	struct buffer_head *page_bufs = NULL;
 	struct inode *inode = page->mapping->host;
 
+	if (adafs_writepage_cut(page, wbc)) return ret; /* AdaFS */
+
 	trace_ext4_writepage(page);
 	size = i_size_read(inode);
 	if (page->index == size >> PAGE_CACHE_SHIFT)
@@ -2930,6 +2932,7 @@ static int ext4_da_writepages(struct address_space *mapping,
 	pgoff_t end;
 
 	trace_ext4_da_writepages(inode, wbc);
+	if (adafs_writepages_cut(mapping)) return ret; /* AdaFS */
 
 	/*
 	 * No pages to write? This is mainly a kludge to avoid starting

@@ -207,4 +207,32 @@ extern ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 extern int adafs_sync_file(struct file *file, int datasync);
 
+/*
+ * Cuts
+ * Put at the beginning of the target function.
+ * The containing function should check the return value.
+ * If it is non-zero, the containing function should return.
+ */
+static inline int adafs_writepage_cut(struct page *page,
+		struct writeback_control *wbc)
+{
+	struct inode *inode = page->mapping->host;
+	int ret = 0;
+	if (S_ISREG(inode->i_mode)) {
+		/* Set the page dirty again, unlock */
+		redirty_page_for_writepage(wbc, page);
+		unlock_page(page);
+		ret = 1;
+	}
+	return ret;
+}
+
+static inline int adafs_writepages_cut(struct address_space *mapping)
+{
+	struct inode *inode = mapping->host;
+	printk(KERN_INFO "[adafs] adafs_writepages_cut: S_ISREG=%d\n",
+			S_ISREG(inode->i_mode));
+	return S_ISREG(inode->i_mode);
+}
+
 #endif /* ADAFS_H_ */
