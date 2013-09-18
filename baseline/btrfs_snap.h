@@ -10,6 +10,7 @@
 #include <libgen.h>
 #include <asm/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <linux/ioctl.h>
 
 #define BTRFS_IOCTL_MAGIC 0x94

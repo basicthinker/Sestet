@@ -8,20 +8,24 @@ if [ $# = 2 ]; then
 	dev=$2
 	post="out"
 else
-	dev="/dev/block/mmcblk1p3"
+	if [ $mode = 2 ]; then
+		dev="/dev/block/mmcblk1p4"
+	elif [ $mode = 3 ]; then
+		dev="none"
+	else
+		dev="/dev/block/mmcblk1p3"
+	fi
 	post="o"
 fi
 
 if [ $mode = 1 ]; then
 	mopt="-o data=journal"
-elif [ $mode = 3 ]; then
-	dev="none"
 fi
 
 types=("ext4" "ext4" "btrfs" "ramfs")
 fs_type=${types[$mode]}
 
-mount -t $fs_type $mopt $dev mnt
+echo "mount -t $fs_type $mopt $dev mnt"
 if [ $? != 0 ]; then
 	exit -1;
 fi
@@ -33,9 +37,10 @@ echo 90 > /proc/sys/vm/dirty_background_ratio
 if [ $mode -ne 2 ]; then
 	mkdir -p mnt/baseline
 fi
-
-./baseline-simu.$post mnt/baseline/tmp.data 2048 1 $mode > bls-$timestamp.data
-echo "Test ends."
-sleep 5
+of="blsi-$mode-$timestamp.data"
+./baseline-simu.$post mnt/baseline/tmp.data 2048 1 $mode > $of
 umount mnt
+echo "Test ends."
+sleep 3
+fsync $of 
 

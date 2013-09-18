@@ -22,7 +22,6 @@ int main(int argc, char *argv[]) {
   double time_begin, time_end;
   char snap_name[BTRFS_VOL_NAME_MAX];
   char *subvol;
-  struct timeval *time;
  
   if (argc != 5) {
     printf("Usage: %s TargetFile NumPages SleepTime Mode[0=sync | 1=journal | 2=snapshot]\n", argv[0]);
@@ -46,7 +45,7 @@ int main(int argc, char *argv[]) {
   fprintf(stderr, "Test begins...\n");
 
   for (i = 0; i < 16; ++i) {
-    sleep(sleep_time);
+    //sleep(sleep_time);
     init_data(data, PAGE_SIZE * num_pages, i + 'a');
 
     time_begin = get_time(&tv); 
@@ -54,8 +53,8 @@ int main(int argc, char *argv[]) {
     if (mode == 0 && (i % 2 == 1)) fsync(fd);
     else if (mode == 1 && (i % 4 == 3)) fsync(fd);
     else if (mode == 2 && (i % 4 == 3)) {
-      gettimeofday(time, NULL);
-      sprintf(snap_name, "%s-%lu", subvol, time->tv_sec);
+      gettimeofday(&tv, NULL);
+      sprintf(snap_name, "%s-%lu", subvol, tv.tv_sec);
       btrfs_snap(subvol, snap_name);
       fsync(fd);
     }
@@ -74,7 +73,7 @@ int main(int argc, char *argv[]) {
  * Test Runs
  *
  * 1. Normal run
- *   Check data after ejection: 't'.
+ *   Check data after ejection: 'p'.
  * 2. Unexpected removal after 5 fsync's (stdout lines)
  *   Check data after removal: 'h'. (If we do not use journal, this would be 'j'.)
 */

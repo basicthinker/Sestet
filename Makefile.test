@@ -4,13 +4,9 @@ CFLAGS += -Wall # -g
 LIB = -lpthread
 HEADERS = ada_log.h ada_sys.h ulist.h uatomic.h
 
-all : test-sort baseline-bench
+all : test-sort
 
 test-sort : ada_log.c test-sort.c $(HEADERS)
 	$(CC) $(CFLAGS) -pthread $(LIB) -o $@.out $^
-
-baseline-bench : baseline-bench.c
-	$(CCC) $(CFLAGS) -static -march=armv7-a -o $@.o $^
-
 clean :
 	rm -rf *.out
