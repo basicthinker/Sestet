@@ -73,8 +73,8 @@ static inline int ext4_begin_ordered_truncate(struct inode *inode,
 static void ext4_invalidatepage(struct page *page, unsigned long offset);
 int noalloc_get_block_write(struct inode *inode, sector_t iblock,
 				   struct buffer_head *bh_result, int create);
-static int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
-static void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
+int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
+void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
 static int __ext4_journalled_writepage(struct page *page, unsigned int len);
 int ext4_bh_delay_or_unwritten(handle_t *handle, struct buffer_head *bh);
 
@@ -2611,8 +2611,8 @@ out:
 	return ret;
 }
 
-static int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
-static void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
+int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
+void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
 
 /*
  * Note that we don't need to start a transaction unless we're journaling data
@@ -2932,8 +2932,6 @@ static int ext4_da_writepages(struct address_space *mapping,
 	pgoff_t end;
 
 	trace_ext4_da_writepages(inode, wbc);
-	if (adafs_writepages_cut(mapping)) return ret; /* AdaFS */
-
 	/*
 	 * No pages to write? This is mainly a kludge to avoid starting
 	 * a transaction for special inodes like journal inode on last iput()
@@ -3657,7 +3655,7 @@ out:
 	iocb->private = NULL;
 }
 
-static void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate)
+void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate)
 {
 	ext4_io_end_t *io_end = bh->b_private;
 	struct workqueue_struct *wq;
@@ -3699,7 +3697,7 @@ out:
 	end_buffer_async_write(bh, uptodate);
 }
 
-static int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode)
+int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode)
 {
 	ext4_io_end_t *io_end;
 	struct page *page = bh->b_page;

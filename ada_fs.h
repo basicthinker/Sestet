@@ -26,8 +26,13 @@ extern struct adafs_log *adafs_logs[MAX_LOG_NUM];
 extern struct task_struct *adafs_flusher;
 extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
-extern const struct flush_operations adafs_fops;
 
+struct flush_operations {
+	handle_t *(*trans_begin)(int nent, void *data);
+	int (*ent_flush)(handle_t *handle,
+			struct log_entry *ent, struct writeback_control *wbc);
+	int (*trans_end)(handle_t *handle, void *data);
+};
 
 /* Hooks */
 extern int adafs_init_hook(const struct flush_operations *fops, struct kset *kset);
@@ -225,14 +230,6 @@ static inline int adafs_writepage_cut(struct page *page,
 		ret = 1;
 	}
 	return ret;
-}
-
-static inline int adafs_writepages_cut(struct address_space *mapping)
-{
-	struct inode *inode = mapping->host;
-	printk(KERN_INFO "[adafs] adafs_writepages_cut: S_ISREG=%d\n",
-			S_ISREG(inode->i_mode));
-	return S_ISREG(inode->i_mode);
 }
 
 #endif /* ADAFS_H_ */

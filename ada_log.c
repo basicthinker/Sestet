@@ -13,6 +13,8 @@
 #include <linux/gfp.h>
 #include <linux/page-flags.h>
 #include <linux/pagemap.h>
+#include <linux/blkdev.h>
+#include <linux/writeback.h>
 #endif
 #include "ada_log.h"
 
@@ -112,10 +114,11 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
-static inline int do_ent_flush(handle_t *handle, struct log_entry *le) {
+static inline int do_ent_flush(handle_t *handle,
+		struct log_entry *le, struct writeback_control *wbc) {
 	if (likely(handle && flush_ops.ent_flush)) {
 		ADAFS_DEBUG(KERN_INFO "[adafs] do_ent_flush() flushes page: " LE_DUMP_PAGE(le));
-		return flush_ops.ent_flush(handle, le);
+		return flush_ops.ent_flush(handle, le, wbc);
 	} else return 0;
 }
 
@@ -144,10 +147,18 @@ static int __merge_flush(struct log_entry entries[],
 		} else if (le_meta(le)) {
 			e = b + 1;
 		} else { // to flush a group of entries
+			struct blk_plug plug;
+			struct writeback_control wbc = {
+					.sync_mode = WB_SYNC_ALL,
+					.nr_to_write = LONG_MAX,
+					.range_start = 0,
+					.range_end = LLONG_MAX };
+
 			le = &entry(b);
 			ino = le_ino(le);
-			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: " LE_DUMP_PAGE(le));
-					sb = le_page(le)->mapping->host->i_sb;
+			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: "
+					LE_DUMP_PAGE(le));
+			sb = le_page(le)->mapping->host->i_sb;
 
 			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
@@ -165,16 +176,18 @@ static int __merge_flush(struct log_entry entries[],
 			e = i;
 			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
 					"begin=%u, end=%u, num=%u\n", ino, b, e, n);
+			blk_start_plug(&plug);
 			handle = do_trans_begin(n, sb);
 			ADAFS_BUG_ON(IS_ERR(handle));
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-		        err = do_ent_flush(handle, le);
+		        err = do_ent_flush(handle, le, &wbc);
 		        evict_entry(le, page_rlog);
 		        ADAFS_BUG_ON(err);
 			}
 			err = do_trans_end(handle, sb);
+			blk_finish_plug(&plug);
 			ADAFS_BUG_ON(err);
 		}
 	} // for all target entries

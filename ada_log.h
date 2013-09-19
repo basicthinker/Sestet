@@ -272,12 +272,6 @@ static inline unsigned long log_stal_sum(struct adafs_log *log) {
 
 extern int __log_sort(struct adafs_log *log, unsigned int begin, unsigned int end);
 
-struct flush_operations {
-	handle_t *(*trans_begin)(int nent, void *data);
-	int (*ent_flush)(handle_t *handle, struct log_entry *ent);
-	int (*trans_end)(handle_t *handle, void *data);
-};
-
 #ifdef __KERNEL__ /* for sysfs */
 
 struct adafs_log_attr {

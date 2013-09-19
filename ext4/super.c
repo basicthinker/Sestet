@@ -51,6 +51,7 @@
 #include "mballoc.h"
 
 #include "ada_fs.h"
+extern const struct flush_operations adafs_fops;
 
 #define CREATE_TRACE_POINTS
 #include "trace-events-ext4.h"
