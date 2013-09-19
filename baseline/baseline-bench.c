@@ -14,14 +14,14 @@ void init_data(char *data, int len, char c) {
 }
 
 int main(int argc, char *argv[]) {
-  int i, num_pages, sleep_time, is_fsync;
+  int i, num_pages, sleep_time;
   int fd;
   char *data;
   struct timeval tv;
   double time_begin, time_end;
 
-  if (argc < 4) {
-    printf("Usage: %s TargetFile NumPages SleepTime [IsFsync=1]\n", argv[0]);
+  if (argc != 4) {
+    printf("Usage: %s TargetFile NumPages SleepTime\n", argv[0]);
     return -1;
   }
 
@@ -36,21 +36,15 @@ int main(int argc, char *argv[]) {
 
   sleep_time = atoi(argv[3]);
 
-  if (argc == 5) is_fsync = atoi(argv[4]);
-  else is_fsync = 1;
-
-  sleep(sleep_time);
-  fprintf(stderr, "Test begins...\n");
-
   for (i = 0; i < 16; ++i) {
     sleep(sleep_time);
     init_data(data, PAGE_SIZE * num_pages, i + 'a');
 
     time_begin = get_time(&tv); 
     write(fd, data, PAGE_SIZE * num_pages);
-    if ((i % 2) && is_fsync) fsync(fd);
+    if (i % 2) fsync(fd);
     time_end = get_time(&tv);
-    printf("%d\t%.5f\n", is_fsync, time_end - time_begin);
+    printf("%.5f\n", time_end - time_begin);
 
     lseek(fd, 0, SEEK_SET);
   }

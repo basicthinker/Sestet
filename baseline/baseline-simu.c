@@ -41,11 +41,8 @@ int main(int argc, char *argv[]) {
   sleep_time = atoi(argv[3]);
   mode = atoi(argv[4]);
 
-  sleep(sleep_time);
-  fprintf(stderr, "Test begins...\n");
-
   for (i = 0; i < 16; ++i) {
-    //sleep(sleep_time);
+    sleep(sleep_time);
     init_data(data, PAGE_SIZE * num_pages, i + 'a');
 
     time_begin = get_time(&tv); 
@@ -74,7 +71,7 @@ int main(int argc, char *argv[]) {
  *
  * 1. Normal run
  *   Check data after ejection: 'p'.
- * 2. Unexpected removal after 5 fsync's (stdout lines)
- *   Check data after removal: 'h'. (If we do not use journal, this would be 'j'.)
+ * 2. Unexpected removal after 6 lines of output
+ *   Check data after removal: 'd'. (If we do not use journal, this would be 'f'.)
 */
 

@@ -1,5 +1,5 @@
 if [ $# -lt 1 ]; then
-	echo "Usage: $0 Mode[0=ext4 | 1=ext4-journal | 2=btrfs | 3=ramfs] [DevPath]"
+	echo "Usage: $0 Mode[ 0=ext4 | 1=ext4-adafs | 2=btrfs ] [DevPath]"
 	exit 1
 fi
 
@@ -22,7 +22,7 @@ if [ $mode = 1 ]; then
 	mopt="-o data=journal"
 fi
 
-types=("ext4" "ext4" "btrfs" "ramfs")
+types=("ext4" "adafs" "btrfs")
 fs_type=${types[$mode]}
 
 mount -t $fs_type $mopt $dev mnt
@@ -41,8 +41,8 @@ fi
 sleep 2
 echo "Test begins."
 
-of="blsi-$mode-$timestamp.data"
-./baseline-simu.$post mnt/baseline/tmp.data 2048 1 $mode > $of
+of="bl-$mode-$timestamp.data"
+./baseline-bench.$post mnt/baseline/tmp.data 2048 1 > $of
 sleep 1
 umount mnt
 
