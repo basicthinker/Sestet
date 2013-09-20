@@ -64,7 +64,7 @@ static inline int __adafs_journalled_writepage(handle_t *handle, struct page *pa
 	//if (!ret)
 		//ret = err;
 
-	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one); /* Moved to wait_flush */
+	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one); /* Moved to wait_sync */
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
 //out:
 	return ret;
@@ -219,7 +219,7 @@ static int adafs_trans_end(handle_t *handle)
 	return err;
 }
 
-static int adafs_wait_flush(struct log_entry *le, void *arg)
+static int adafs_wait_sync(struct log_entry *le, void *arg)
 {
 	struct page *page = le_page(le);
 	struct inode *inode = page->mapping->host;
@@ -237,5 +237,5 @@ const struct flush_operations adafs_fops = {
 	.trans_begin = adafs_trans_begin,
 	.entry_flush = adafs_entry_flush,
 	.trans_end = adafs_trans_end,
-	.wait_flush = adafs_wait_flush
+	.wait_sync = adafs_wait_sync
 };

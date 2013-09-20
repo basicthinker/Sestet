@@ -32,7 +32,7 @@ struct flush_operations {
 	int (*entry_flush)(handle_t *handle,
 			struct log_entry *le, struct writeback_control *wbc);
 	int (*trans_end)(handle_t *handle);
-	int (*wait_flush)(struct log_entry *ent, void *arg);
+	int (*wait_sync)(struct log_entry *ent, void *arg);
 };
 
 /* Hooks */

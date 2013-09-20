@@ -114,26 +114,40 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
+/* Adopted from write_cache_pages() in mm/page-writeback.c */
 static inline int do_le_flush(handle_t *handle,
 		struct log_entry *le, struct writeback_control *wbc) {
+	struct page *page = le_page(le);
 	if (likely(handle && flush_ops.entry_flush)) {
 		ADAFS_DEBUG(KERN_INFO "[adafs] do_le_flush() flushes page: " LE_DUMP_PAGE(le));
-		lock_page(le_page(le));
+		lock_page(page);
+
+		if (!PageDirty(page)) /* someone wrote it for us */
+			goto out;
+
+		if (PageWriteback(page)) {
+			if (wbc->sync_mode != WB_SYNC_NONE)
+				wait_on_page_writeback(page);
+			else
+				goto out;
+		}
+
+		BUG_ON(PageWriteback(page));
+		if (!clear_page_dirty_for_io(page))
+			goto out;
+
 		return flush_ops.entry_flush(handle, le, wbc);
-	} else return 0;
+	out:
+		unlock_page(page);
+		PRINT(ERR "[adafs] do_le_flush did NOT flush: " LE_DUMP_PAGE(le));
+	}
+	return 0;
 }
 
-static inline void do_wait_flush(struct log_entry *le, tid_t *tid)
+static inline void do_wait_sync(struct log_entry *le, tid_t *tid)
 {
-	struct page *page = le_page(le);
-
-	wait_on_page_writeback(page);
-	if (TestClearPageError(page)) {
-		printk(KERN_ERR "[adafs] do_wait_flush meet page error: " LE_DUMP_PAGE(le));
-	}
-
-	if (likely(flush_ops.wait_flush)) {
-		flush_ops.wait_flush(le, tid);
+	if (likely(flush_ops.wait_sync)) {
+		flush_ops.wait_sync(le, tid);
 	}
 }
 
@@ -192,6 +206,7 @@ static int __merge_flush(struct log_entry entries[],
 			e = i;
 			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
 					"begin=%u, end=%u, num=%u\n", ino, b, e, n);
+
 			blk_start_plug(&plug);
 			handle = do_trans_begin(n, inode);
 			ADAFS_BUG_ON(IS_ERR(handle));
@@ -203,13 +218,20 @@ static int __merge_flush(struct log_entry entries[],
 		        ADAFS_BUG_ON(err);
 			}
 			err = do_trans_end(handle);
+			blk_finish_plug(&plug);
+
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-				do_wait_flush(le, &commit_tid);
+				wait_on_page_writeback(le_page(le));
+				BUG_ON(TestClearPageError(le_page(le)));
+			}
+			mutex_lock(&inode->i_mutex);
+			le_for_each(le, i, b, e) {
+				if (le_inval(le)) continue;
+				do_wait_sync(le, &commit_tid);
 		        evict_entry(le, page_rlog);
 			}
-			blk_finish_plug(&plug);
-			ADAFS_BUG_ON(err);
+			mutex_unlock(&inode->i_mutex);
 		}
 	} // for all target entries
 	return err;
