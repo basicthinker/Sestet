@@ -28,10 +28,11 @@ extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
 
 struct flush_operations {
-	handle_t *(*trans_begin)(int nent, void *data);
-	int (*ent_flush)(handle_t *handle,
-			struct log_entry *ent, struct writeback_control *wbc);
-	int (*trans_end)(handle_t *handle, void *data);
+	handle_t *(*trans_begin)(int nent, void *arg);
+	int (*entry_flush)(handle_t *handle,
+			struct log_entry *le, struct writeback_control *wbc);
+	int (*trans_end)(handle_t *handle);
+	int (*wait_flush)(struct log_entry *ent, void *arg);
 };
 
 /* Hooks */
@@ -210,7 +211,6 @@ static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_in
 extern ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos);
 
-extern int adafs_sync_file(struct file *file, int datasync);
 
 /*
  * Cuts
@@ -231,5 +231,8 @@ static inline int adafs_writepage_cut(struct page *page,
 	}
 	return ret;
 }
+
+#define adafs_sync_file_cut(inode) (S_ISREG((inode)->i_mode) ? \
+		printk(KERN_INFO "[adafs] adafs_sync_file_cut at %s\n", __func__), 1 : 0)
 
 #endif /* ADAFS_H_ */

@@ -114,17 +114,32 @@ static inline handle_t *do_trans_begin(int nent, void *arg) {
 	else return NULL;
 }
 
-static inline int do_ent_flush(handle_t *handle,
+static inline int do_le_flush(handle_t *handle,
 		struct log_entry *le, struct writeback_control *wbc) {
-	if (likely(handle && flush_ops.ent_flush)) {
-		ADAFS_DEBUG(KERN_INFO "[adafs] do_ent_flush() flushes page: " LE_DUMP_PAGE(le));
-		return flush_ops.ent_flush(handle, le, wbc);
+	if (likely(handle && flush_ops.entry_flush)) {
+		ADAFS_DEBUG(KERN_INFO "[adafs] do_le_flush() flushes page: " LE_DUMP_PAGE(le));
+		lock_page(le_page(le));
+		return flush_ops.entry_flush(handle, le, wbc);
 	} else return 0;
 }
 
-static inline int do_trans_end(handle_t *handle, void *arg) {
+static inline void do_wait_flush(struct log_entry *le, tid_t *tid)
+{
+	struct page *page = le_page(le);
+
+	wait_on_page_writeback(page);
+	if (TestClearPageError(page)) {
+		printk(KERN_ERR "[adafs] do_wait_flush meet page error: " LE_DUMP_PAGE(le));
+	}
+
+	if (likely(flush_ops.wait_flush)) {
+		flush_ops.wait_flush(le, tid);
+	}
+}
+
+static inline int do_trans_end(handle_t *handle) {
 	if (likely(handle && flush_ops.trans_end))
-		return flush_ops.trans_end(handle, arg);
+		return flush_ops.trans_end(handle);
 	else return 0;
 }
 
@@ -134,8 +149,9 @@ static inline int do_trans_end(handle_t *handle, void *arg) {
 static int __merge_flush(struct log_entry entries[],
 		const unsigned int begin, const unsigned int end) {
 	struct log_entry *le;
+	struct inode *inode;
 	handle_t *handle;
-	struct super_block *sb;
+	tid_t commit_tid;
 	unsigned int b, e, i, n;
 	int err = 0;
 	unsigned long ino;
@@ -158,7 +174,7 @@ static int __merge_flush(struct log_entry entries[],
 			ino = le_ino(le);
 			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: "
 					LE_DUMP_PAGE(le));
-			sb = le_page(le)->mapping->host->i_sb;
+			inode = le_page(le)->mapping->host;
 
 			n = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
@@ -177,16 +193,21 @@ static int __merge_flush(struct log_entry entries[],
 			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
 					"begin=%u, end=%u, num=%u\n", ino, b, e, n);
 			blk_start_plug(&plug);
-			handle = do_trans_begin(n, sb);
+			handle = do_trans_begin(n, inode);
 			ADAFS_BUG_ON(IS_ERR(handle));
+			commit_tid = handle->h_transaction->t_tid;
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-		        err = do_ent_flush(handle, le, &wbc);
-		        evict_entry(le, page_rlog);
+		        err = do_le_flush(handle, le, &wbc);
 		        ADAFS_BUG_ON(err);
 			}
-			err = do_trans_end(handle, sb);
+			err = do_trans_end(handle);
+			le_for_each(le, i, b, e) {
+				if (le_inval(le)) continue;
+				do_wait_flush(le, &commit_tid);
+		        evict_entry(le, page_rlog);
+			}
 			blk_finish_plug(&plug);
 			ADAFS_BUG_ON(err);
 		}

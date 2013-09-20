@@ -339,8 +339,3 @@ ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	return ret;
 }
 
-int adafs_sync_file(struct file *file, int datasync) {
-	struct inode *inode = file->f_mapping->host;
-	PRINT(INFO "[adafs] adafs_sync_file() on file: ino=%lu\n", inode->i_ino);
-	return 0;
-}

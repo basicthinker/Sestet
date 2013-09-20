@@ -64,7 +64,7 @@ static inline int __adafs_journalled_writepage(handle_t *handle, struct page *pa
 	//if (!ret)
 		//ret = err;
 
-	walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
+	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one); /* Moved to wait_flush */
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
 //out:
 	return ret;
@@ -137,35 +137,105 @@ static inline int adafs_writepage(handle_t *handle, struct page *page,
 	return ret;
 }
 
-static handle_t *adafs_trans_begin(int npages, void *arg) {
-	struct super_block *sb = (struct super_block *)arg;
-	int blocks_per_page = (1 << (PAGE_CACHE_SHIFT - sb->s_blocksize_bits));
+static inline int adafs_sync_file(struct inode *inode, tid_t commit_tid)
+{
+	//struct inode *inode = file->f_mapping->host;
+	//struct ext4_inode_info *ei = EXT4_I(inode);
+	journal_t *journal = EXT4_SB(inode->i_sb)->s_journal;
+	int ret;
+	//tid_t commit_tid;
+	bool needs_barrier = false;
+
+	J_ASSERT(ext4_journal_current_handle() == NULL);
+
+	//trace_ext4_sync_file_enter(file, datasync);
+
+	if (inode->i_sb->s_flags & MS_RDONLY)
+		return 0;
+
+	ret = ext4_flush_completed_IO(inode);
+	if (ret < 0)
+		goto out;
+
+	BUG_ON(!journal);
+
+	/*
+	 * data=writeback,ordered:
+	 *  The caller's filemap_fdatawrite()/wait will sync the data.
+	 *  Metadata is in the journal, we wait for proper transaction to
+	 *  commit here.
+	 *
+	 * data=journal:
+	 *  filemap_fdatawrite won't do anything (the buffers are clean).
+	 *  ext4_force_commit will write the file data into the journal and
+	 *  will wait on that.
+	 *  filemap_fdatawait() will encounter a ton of newly-dirtied pages
+	 *  (they were dirtied by commit).  But that's OK - the blocks are
+	 *  safe in-journal, which is all fsync() needs to ensure.
+	 */
+	if (ext4_should_journal_data(inode)) {
+		ret = ext4_force_commit(inode->i_sb);
+		goto out;
+	}
+
+	//commit_tid = datasync ? ei->i_datasync_tid : ei->i_sync_tid;
+	if (journal->j_flags & JBD2_BARRIER &&
+	    !jbd2_trans_will_send_data_barrier(journal, commit_tid))
+		needs_barrier = true;
+	jbd2_log_start_commit(journal, commit_tid);
+	ret = jbd2_log_wait_commit(journal, commit_tid);
+	if (needs_barrier)
+		blkdev_issue_flush(inode->i_sb->s_bdev, GFP_KERNEL, NULL);
+ out:
+	//trace_ext4_sync_file_exit(inode, ret);
+	return ret;
+}
+
+
+static handle_t *adafs_trans_begin(int npages, void *arg)
+{
+	struct inode *inode = (struct inode *)arg;
+	int blocks_per_page = jbd2_journal_blocks_per_page(inode);
 	int nblocks = npages * blocks_per_page;
-	return ext4_journal_start_sb(sb, nblocks);
+	return ext4_journal_start(inode, nblocks);
 }
 
-static int adafs_ent_flush(handle_t *handle, struct log_entry *ent,
-		struct writeback_control *wbc) {
-	struct page *page = le_page(ent);
-	lock_page(page);
-	return adafs_writepage(handle, page, le_len(ent), wbc);
+static int adafs_entry_flush(handle_t *handle, struct log_entry *le,
+		struct writeback_control *wbc)
+{
+	return adafs_writepage(handle, le_page(le), le_len(le), wbc);
 }
 
-static int adafs_trans_end(handle_t *handle, void *arg) {
+static int adafs_trans_end(handle_t *handle)
+{
 	int err;
 
 	BUG_ON(!ext4_handle_valid(handle));
-	handle->h_sync = 1;
-	err = ext4_journal_stop(handle);
 
+	err = ext4_journal_stop(handle);
 	if (unlikely(err)) {
-		printk(KERN_ERR "[adafs] adafs_trans_end fails to wait commit: %d\n", err);
+		printk(KERN_ERR "[adafs] adafs_trans_end fails at ext4_journal_stop: %d\n", err);
 	}
 	return err;
 }
 
+static int adafs_wait_flush(struct log_entry *le, void *arg)
+{
+	struct page *page = le_page(le);
+	struct inode *inode = page->mapping->host;
+	tid_t *tid = (tid_t *)arg;
+	struct buffer_head *page_bufs;
+
+	if (page_has_buffers(page)) {
+		page_bufs = page_buffers(page);
+		walk_page_buffers(NULL, page_bufs, 0, le_len(le), NULL, bput_one);
+	}
+	return adafs_sync_file(inode, *tid);
+}
+
 const struct flush_operations adafs_fops = {
 	.trans_begin = adafs_trans_begin,
-	.ent_flush = adafs_ent_flush,
+	.entry_flush = adafs_entry_flush,
 	.trans_end = adafs_trans_end,
+	.wait_flush = adafs_wait_flush
 };
