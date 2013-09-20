@@ -80,8 +80,6 @@ static inline int adafs_writepage(handle_t *handle, struct page *page,
 	struct buffer_head *page_bufs = NULL;
 	struct inode *inode = page->mapping->host;
 
-	if (adafs_writepage_cut(page, wbc)) return ret; /* AdaFS */
-
 	//trace_ext4_writepage(page);
 	//size = i_size_read(inode);
 	//if (page->index == size >> PAGE_CACHE_SHIFT)
@@ -100,7 +98,7 @@ static inline int adafs_writepage(handle_t *handle, struct page *page,
 		redirty_page:
 			redirty_page_for_writepage(wbc, page);
 			unlock_page(page);
-			return 0;
+			return -EIO;
 		}
 		commit_write = 1;
 	}
@@ -131,8 +129,7 @@ static inline int adafs_writepage(handle_t *handle, struct page *page,
 		ret = block_write_full_page_endio(page, noalloc_get_block_write,
 					    wbc, ext4_end_io_buffer_write);
 	} else
-		ret = block_write_full_page(page, noalloc_get_block_write,
-					    wbc);
+		ret = block_write_full_page(page, noalloc_get_block_write, wbc);
 
 	return ret;
 }

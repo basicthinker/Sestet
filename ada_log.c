@@ -122,24 +122,24 @@ static inline int do_le_flush(handle_t *handle,
 		ADAFS_DEBUG(KERN_INFO "[adafs] do_le_flush() flushes page: " LE_DUMP_PAGE(le));
 		lock_page(page);
 
-		if (!PageDirty(page)) /* someone wrote it for us */
-			goto out;
+		//if (!PageDirty(page)) /* someone wrote it for us */
+			//goto out;
 
-		if (PageWriteback(page)) {
-			if (wbc->sync_mode != WB_SYNC_NONE)
-				wait_on_page_writeback(page);
-			else
-				goto out;
-		}
+		//if (PageWriteback(page)) {
+			//if (wbc->sync_mode != WB_SYNC_NONE)
+				//wait_on_page_writeback(page);
+			//else
+				//goto out;
+		//}
 
 		BUG_ON(PageWriteback(page));
-		if (!clear_page_dirty_for_io(page))
-			goto out;
+		//if (!clear_page_dirty_for_io(page))
+			//goto out;
 
 		return flush_ops.entry_flush(handle, le, wbc);
-	out:
-		unlock_page(page);
-		PRINT(ERR "[adafs] do_le_flush did NOT flush: " LE_DUMP_PAGE(le));
+	//out:
+		//unlock_page(page);
+		//PRINT(ERR "[adafs] do_le_flush did NOT flush: " LE_DUMP(le));
 	}
 	return 0;
 }
@@ -214,8 +214,10 @@ static int __merge_flush(struct log_entry entries[],
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-		        err = do_le_flush(handle, le, &wbc);
-		        ADAFS_BUG_ON(err);
+				err = do_le_flush(handle, le, &wbc);
+				if (unlikely(err)) {
+					PRINT(ERR "[adafs] entry_flush failed: " LE_DUMP(le));
+				}
 			}
 			err = do_trans_end(handle);
 			blk_finish_plug(&plug);

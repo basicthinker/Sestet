@@ -170,7 +170,7 @@ again:
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
-		// AdaFS:
+		/* AdaFS */
 		if (!re_entry) rl = adafs_try_assoc_rlog(mapping->host, page);
 
 		pagefault_disable();
@@ -205,7 +205,7 @@ again:
 		pos += copied;
 		written += copied;
 
-		// AdaFS:
+		/* AdaFS */
 		adafs_try_append_log(mapping->host, rl, offset, copied);
 
 //		balance_dirty_pages_ratelimited(mapping);
@@ -256,7 +256,7 @@ static inline ssize_t __adafs_file_aio_write(struct kiocb *iocb, const struct io
 		unsigned long nr_segs, loff_t *ppos)
 {
 	struct file *file = iocb->ki_filp;
-	struct address_space * mapping = file->f_mapping;
+	struct address_space *mapping = file->f_mapping;
 	size_t ocount; /* original count */
 	size_t count; /* after file limit checks */
 	struct inode *inode = mapping->host;
