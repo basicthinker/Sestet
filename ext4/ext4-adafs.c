@@ -6,15 +6,11 @@
 
 #include "ada_fs.h"
 
-extern int walk_page_buffers(handle_t *handle,
-                             struct buffer_head *head,
-                             unsigned from,
-                             unsigned to,
-                             int *partial,
-                             int (*fn)(handle_t *handle,
-                                       struct buffer_head *bh));
+extern int walk_page_buffers(handle_t *handle, struct buffer_head *head,
+		unsigned from, unsigned to,
+		int *partial,
+		int (*fn)(handle_t *handle, struct buffer_head *bh));
 extern int bget_one(handle_t *handle, struct buffer_head *bh);
-extern int bput_one(handle_t *handle, struct buffer_head *bh);
 extern int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
 extern void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
 extern int do_journal_get_write_access(handle_t *handle,
@@ -33,14 +29,13 @@ static inline int __adafs_journalled_writepage(handle_t *handle, struct page *pa
 	struct address_space *mapping = page->mapping;
 	struct inode *inode = mapping->host;
 	struct buffer_head *page_bufs;
-	//handle_t *handle = NULL;
 	int ret = 0;
 	int err;
 
 	ClearPageChecked(page);
 	page_bufs = page_buffers(page);
 	BUG_ON(!page_bufs);
-	walk_page_buffers(NULL, page_bufs, 0, len, NULL, bget_one);
+	walk_page_buffers(handle, page_bufs, 0, len, NULL, bget_one);
 	/* As soon as we unlock the page, it can go away, but we have
 	 * references to buffers so we are safe */
 	unlock_page(page);
@@ -64,7 +59,8 @@ static inline int __adafs_journalled_writepage(handle_t *handle, struct page *pa
 	//if (!ret)
 		//ret = err;
 
-	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one); /* Moved to wait_sync */
+	/* Managed by AdaFS */
+	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
 //out:
 	return ret;
@@ -189,11 +185,10 @@ static inline int adafs_sync_file(struct inode *inode, tid_t commit_tid)
 }
 
 
-static handle_t *adafs_trans_begin(int npages, void *arg)
+static handle_t *adafs_trans_begin(struct inode *inode, int nles)
 {
-	struct inode *inode = (struct inode *)arg;
 	int blocks_per_page = jbd2_journal_blocks_per_page(inode);
-	int nblocks = npages * blocks_per_page;
+	int nblocks = nles * blocks_per_page;
 	return ext4_journal_start(inode, nblocks);
 }
 
@@ -216,18 +211,9 @@ static int adafs_trans_end(handle_t *handle)
 	return err;
 }
 
-static int adafs_wait_sync(struct log_entry *le, void *arg)
+static int adafs_wait_sync(struct inode *inode, tid_t commit_tid)
 {
-	struct page *page = le_page(le);
-	struct inode *inode = page->mapping->host;
-	tid_t *tid = (tid_t *)arg;
-	struct buffer_head *page_bufs;
-
-	if (page_has_buffers(page)) {
-		page_bufs = page_buffers(page);
-		walk_page_buffers(NULL, page_bufs, 0, le_len(le), NULL, bput_one);
-	}
-	return adafs_sync_file(inode, *tid);
+	return adafs_sync_file(inode, commit_tid);
 }
 
 const struct flush_operations adafs_fops = {

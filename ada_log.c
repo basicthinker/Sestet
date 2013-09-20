@@ -21,6 +21,12 @@
 #define CUT_OFF 4
 #define STACK_SIZE 32
 
+extern int walk_page_buffers(handle_t *handle, struct buffer_head *head,
+		unsigned from, unsigned to,
+		int *partial,
+		int (*fn)(handle_t *handle, struct buffer_head *bh));
+extern int bput_one(handle_t *handle, struct buffer_head *bh);
+
 #define entry(i) (entries[(i) & LOG_MASK])
 
 #define SWAP_ENTRY(a, b) do { \
@@ -108,17 +114,18 @@ int __log_sort(struct adafs_log *log, unsigned int begin, unsigned int end) {
 
 struct flush_operations flush_ops = { NULL, NULL, NULL };
 
-static inline handle_t *do_trans_begin(int nent, void *arg) {
-	if (likely(nent > 0 && flush_ops.trans_begin))
-		return flush_ops.trans_begin(nent, arg);
-	else return NULL;
+static inline handle_t *do_trans_begin(struct inode *inode, int nles) {
+	if (likely(nles > 0 && flush_ops.trans_begin)) {
+		return flush_ops.trans_begin(inode, nles);
+	}
+	return NULL;
 }
 
 /* Adopted from write_cache_pages() in mm/page-writeback.c */
 static inline int do_le_flush(handle_t *handle,
 		struct log_entry *le, struct writeback_control *wbc) {
-	struct page *page = le_page(le);
 	if (likely(handle && flush_ops.entry_flush)) {
+		struct page *page = le_page(le);
 		ADAFS_DEBUG(KERN_INFO "[adafs] do_le_flush() flushes page: " LE_DUMP_PAGE(le));
 		lock_page(page);
 
@@ -144,17 +151,19 @@ static inline int do_le_flush(handle_t *handle,
 	return 0;
 }
 
-static inline void do_wait_sync(struct log_entry *le, tid_t *tid)
+static inline int do_wait_sync(struct inode *inode, tid_t tid)
 {
 	if (likely(flush_ops.wait_sync)) {
-		flush_ops.wait_sync(le, tid);
+		return flush_ops.wait_sync(inode, tid);
 	}
+	return 0;
 }
 
 static inline int do_trans_end(handle_t *handle) {
-	if (likely(handle && flush_ops.trans_end))
+	if (likely(handle && flush_ops.trans_end)) {
 		return flush_ops.trans_end(handle);
-	else return 0;
+	}
+	return 0;
 }
 
 #define le_for_each(le, i, begin, end) \
@@ -166,7 +175,9 @@ static int __merge_flush(struct log_entry entries[],
 	struct inode *inode;
 	handle_t *handle;
 	tid_t commit_tid;
-	unsigned int b, e, i, n;
+	struct page *page;
+	struct buffer_head *page_bufs;
+	unsigned int b, e, i, nles;
 	int err = 0;
 	unsigned long ino;
 
@@ -190,7 +201,7 @@ static int __merge_flush(struct log_entry entries[],
 					LE_DUMP_PAGE(le));
 			inode = le_page(le)->mapping->host;
 
-			n = 1; // counts pages to flush
+			nles = 1; // counts pages to flush
 			le_for_each(le, i, b + 1, end) {
 				if (unlikely(le_ino(le) != ino)) break;
 				if (le_pgi(&entry(i - 1)) == le_pgi(le)) {
@@ -201,14 +212,16 @@ static int __merge_flush(struct log_entry entries[],
 
 					if (le_len(le) < le_len(&entry(i - 1)))
 						le_set_len(le, le_len(&entry(i - 1)));
-				} else ++n;
+				} else {
+					++nles;
+				}
 			} // for
 			e = i;
 			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
-					"begin=%u, end=%u, num=%u\n", ino, b, e, n);
+					"begin=%u, end=%u, num=%u\n", ino, b, e, nles);
 
 			blk_start_plug(&plug);
-			handle = do_trans_begin(n, inode);
+			handle = do_trans_begin(inode, nles);
 			ADAFS_BUG_ON(IS_ERR(handle));
 			commit_tid = handle->h_transaction->t_tid;
 
@@ -224,15 +237,19 @@ static int __merge_flush(struct log_entry entries[],
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-				wait_on_page_writeback(le_page(le));
-				BUG_ON(TestClearPageError(le_page(le)));
+
+				page = le_page(le);
+				page_bufs = page_buffers(page);
+				BUG_ON(!page_bufs);
+				walk_page_buffers(handle, page_bufs, 0, le_len(le), NULL, bput_one);
+
+				wait_on_page_writeback(page);
+				BUG_ON(TestClearPageError(page));
+
+				evict_entry(le, page_rlog);
 			}
 			mutex_lock(&inode->i_mutex);
-			le_for_each(le, i, b, e) {
-				if (le_inval(le)) continue;
-				do_wait_sync(le, &commit_tid);
-		        evict_entry(le, page_rlog);
-			}
+			do_wait_sync(inode, commit_tid);
 			mutex_unlock(&inode->i_mutex);
 		}
 	} // for all target entries

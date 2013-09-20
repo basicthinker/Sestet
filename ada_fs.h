@@ -28,11 +28,11 @@ extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
 
 struct flush_operations {
-	handle_t *(*trans_begin)(int nent, void *arg);
+	handle_t *(*trans_begin)(struct inode *inode, int nles);
 	int (*entry_flush)(handle_t *handle,
 			struct log_entry *le, struct writeback_control *wbc);
 	int (*trans_end)(handle_t *handle);
-	int (*wait_sync)(struct log_entry *ent, void *arg);
+	int (*wait_sync)(struct inode *inode, tid_t commit_tid);
 };
 
 /* Hooks */
