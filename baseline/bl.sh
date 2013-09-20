@@ -48,5 +48,7 @@ umount mnt
 
 echo "Test ends."
 sleep 2
-fsync $of 
+fsync $of
+echo 500 > /proc/sys/vm/dirty_writeback_centisecs
+echo 5 > /proc/sys/vm/dirty_background_ratio
 
