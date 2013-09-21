@@ -145,7 +145,7 @@ static inline int do_le_flush(handle_t *handle,
 	return 0;
 }
 
-static inline int do_wait_sync(struct inode *inode, tid_t tid)
+static inline int __do_wait_sync(struct inode *inode, tid_t tid)
 {
 	if (likely(flush_ops.wait_sync)) {
 		return flush_ops.wait_sync(inode, tid);
@@ -163,8 +163,10 @@ static inline int do_trans_end(handle_t *handle) {
 #define le_for_each(le, i, begin, end) \
 		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
 
-static int __merge_flush(struct log_entry entries[],
-		const unsigned int begin, const unsigned int end) {
+static int __merge_flush(struct adafs_log *log,
+		const unsigned int begin, const unsigned int end,
+		struct completion *cmpl) {
+	struct log_entry *entries = log->l_entries;
 	struct log_entry *le;
 	struct inode *inode;
 	handle_t *handle;
@@ -232,18 +234,22 @@ static int __merge_flush(struct log_entry entries[],
 				wait_on_page_writeback(le_page(le));
 				evict_entry(le, page_rlog);
 			}
+
+			log->l_begin = e;
+			complete_all(cmpl);
+			INIT_COMPLETION(*cmpl);
+
 			mutex_lock(&inode->i_mutex);
-			do_wait_sync(inode, commit_tid);
+			__do_wait_sync(inode, commit_tid);
 			mutex_unlock(&inode->i_mutex);
 		}
 	} // for all target entries
 	return err;
 }
 
-int log_flush(struct adafs_log *log, unsigned int nr) {
+int log_flush(struct adafs_log *log, unsigned int nr, struct completion *cmpl) {
     unsigned int begin, end;
     int err = 0;
-    struct log_entry *entries = log->l_entries;
     struct transaction *tran;
 
     spin_lock(&log->l_tlock);
@@ -266,8 +272,7 @@ int log_flush(struct adafs_log *log, unsigned int nr) {
 
     mutex_lock(&log->l_fmutex);
     __log_sort(log, begin, end);
-    err = __merge_flush(entries, begin, end);
-    log->l_begin = end;
+    err = __merge_flush(log, begin, end, cmpl);
     mutex_unlock(&log->l_fmutex);
     return err;
 }

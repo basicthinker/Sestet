@@ -167,7 +167,7 @@ static inline int adafs_sync_file(struct inode *inode, tid_t commit_tid)
 	 *  safe in-journal, which is all fsync() needs to ensure.
 	 */
 	if (ext4_should_journal_data(inode)) {
-		//ret = ext4_force_commit(inode->i_sb); /* We already set handle->h_sync */
+		ret = ext4_force_commit(inode->i_sb);
 		goto out;
 	}
 
@@ -189,11 +189,7 @@ static handle_t *adafs_trans_begin(struct inode *inode, int nles)
 {
 	int blocks_per_page = jbd2_journal_blocks_per_page(inode);
 	int nblocks = nles * blocks_per_page;
-	handle_t *handle = ext4_journal_start(inode, nblocks);
-	if (!IS_ERR(handle)) {
-		handle->h_sync = 1;
-	}
-	return handle;
+	return ext4_journal_start(inode, nblocks);
 }
 
 static int adafs_entry_flush(handle_t *handle, struct log_entry *le,

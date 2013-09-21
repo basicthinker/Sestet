@@ -41,7 +41,7 @@ int adafs_flush(void *data)
 
 		while (--i >= 0) {
 			log = adafs_logs[i];
-			while (log_flush(log, UINT_MAX) == -ENODATA &&
+			while (log_flush(log, UINT_MAX, &log->l_fcmpl) == -ENODATA &&
 					log->l_head != log->l_end) {
 				log_seal(log);
 			}

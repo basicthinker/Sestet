@@ -202,7 +202,7 @@ static inline struct adafs_log *new_log(struct kset *kset)
 	return log;
 }
 
-extern int log_flush(struct adafs_log *log, unsigned int nr);
+extern int log_flush(struct adafs_log *log, unsigned int nr, struct completion *cmpl);
 
 static inline void log_destroy(struct adafs_log *log) {
 	struct transaction *pos, *tmp;
