@@ -37,6 +37,10 @@ int adafs_flush(void *data)
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log = adafs_logs[i];
 			INIT_COMPLETION(log->l_fcmpl);
+		}
+
+		while (--i >= 0) {
+			log = adafs_logs[i];
 			while (log_flush(log, UINT_MAX) == -ENODATA &&
 					log->l_head != log->l_end) {
 				log_seal(log);
@@ -112,6 +116,21 @@ void adafs_exit_hook(void)
 		kfree(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
+}
+
+void adafs_put_super_hook(void)
+{
+	struct adafs_log *log;
+	int all = 1;
+	do {
+		int i;
+		wake_up_process(adafs_flusher);
+		for (i = 0; i < atomic_read(&num_logs); ++i) {
+			log = adafs_logs[i];
+			wait_for_completion(&log->l_fcmpl);
+			if (log->l_begin != log->l_end) all = 0;
+		}
+	} while (!all);
 }
 
 // mm/filemap.c

@@ -39,6 +39,8 @@ struct flush_operations {
 extern int adafs_init_hook(const struct flush_operations *fops, struct kset *kset);
 extern void adafs_exit_hook(void);
 
+extern void adafs_put_super_hook(void);
+
 static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_inode, int mode)
 {
 	if (dir) {
