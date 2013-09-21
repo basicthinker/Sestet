@@ -178,7 +178,7 @@ int ext4_sync_file(struct file *file, int datasync)
 	J_ASSERT(ext4_journal_current_handle() == NULL);
 
 	trace_ext4_sync_file_enter(file, datasync);
-	if (adafs_sync_file_cut(inode)) return 1; /* AdaFS */
+	if (adafs_sync_file_cut(inode)) return 0; /* AdaFS */
 
 	if (inode->i_sb->s_flags & MS_RDONLY)
 		return 0;

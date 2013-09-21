@@ -11,6 +11,7 @@ extern int walk_page_buffers(handle_t *handle, struct buffer_head *head,
 		int *partial,
 		int (*fn)(handle_t *handle, struct buffer_head *bh));
 extern int bget_one(handle_t *handle, struct buffer_head *bh);
+extern int bput_one(handle_t *handle, struct buffer_head *bh);
 extern int ext4_set_bh_endio(struct buffer_head *bh, struct inode *inode);
 extern void ext4_end_io_buffer_write(struct buffer_head *bh, int uptodate);
 extern int do_journal_get_write_access(handle_t *handle,
@@ -59,8 +60,7 @@ static inline int __adafs_journalled_writepage(handle_t *handle, struct page *pa
 	//if (!ret)
 		//ret = err;
 
-	/* Managed by AdaFS */
-	//walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
+	walk_page_buffers(handle, page_bufs, 0, len, NULL, bput_one);
 	ext4_set_inode_state(inode, EXT4_STATE_JDATA);
 //out:
 	return ret;

@@ -90,7 +90,10 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 		copy_page(vto, vfrom);
 		kunmap_atomic(vfrom, KM_USER0);
 		kunmap_atomic(vto, KM_USER1);
-		cpage = page; // for retrieval of surrounding data structures
+
+		cpage->flags = page->flags;
+		cpage->mapping = page->mapping; // for retrieval of inode
+		cpage->index = page->index;
 
 		nrl = rlog_malloc();
 		assoc_rlog(nrl, cpage, rl_enti(rl), page_rlog);

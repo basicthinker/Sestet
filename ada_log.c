@@ -21,12 +21,6 @@
 #define CUT_OFF 4
 #define STACK_SIZE 32
 
-extern int walk_page_buffers(handle_t *handle, struct buffer_head *head,
-		unsigned from, unsigned to,
-		int *partial,
-		int (*fn)(handle_t *handle, struct buffer_head *bh));
-extern int bput_one(handle_t *handle, struct buffer_head *bh);
-
 #define entry(i) (entries[(i) & LOG_MASK])
 
 #define SWAP_ENTRY(a, b) do { \
@@ -175,8 +169,6 @@ static int __merge_flush(struct log_entry entries[],
 	struct inode *inode;
 	handle_t *handle;
 	tid_t commit_tid;
-	struct page *page;
-	struct buffer_head *page_bufs;
 	unsigned int b, e, i, nles;
 	int err = 0;
 	unsigned long ino;
@@ -237,15 +229,7 @@ static int __merge_flush(struct log_entry entries[],
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-
-				page = le_page(le);
-				page_bufs = page_buffers(page);
-				BUG_ON(!page_bufs);
-				walk_page_buffers(handle, page_bufs, 0, le_len(le), NULL, bput_one);
-
-				wait_on_page_writeback(page);
-				BUG_ON(TestClearPageError(page));
-
+				wait_on_page_writeback(le_page(le));
 				evict_entry(le, page_rlog);
 			}
 			mutex_lock(&inode->i_mutex);
