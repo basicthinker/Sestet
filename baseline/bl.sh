@@ -40,12 +40,13 @@ fi
 
 sleep 2
 echo "Test begins."
+sleep 1
 
 of="bl-$mode-$timestamp.data"
 ./baseline-bench.$post mnt/baseline/tmp.data 2048 1 > $of
 sleep 1
 umount mnt
-
+sleep 1
 echo "Test ends."
 sleep 2
 fsync $of

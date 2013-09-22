@@ -40,6 +40,7 @@ fi
 
 sleep 2
 echo "Test begins."
+sleep 1
 
 of="blsi-$mode-$timestamp.data"
 ./baseline-simu.$post mnt/baseline/tmp.data 2048 1 $mode > $of
