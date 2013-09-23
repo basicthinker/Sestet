@@ -26,6 +26,9 @@
 *.suo
 Debug/*
 
+*.data
+*.eps
+
 .tmp*
 *.cmd
 *.mod.c
