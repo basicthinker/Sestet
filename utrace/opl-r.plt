@@ -1,6 +1,6 @@
 set terminal postscript eps enhanced font 24
 set size 1,1
-set output "opl-ratio.eps"
+set output "opl-r.eps"
 set style data histograms
 set style fill pattern 1
 set style histogram cluster gap 1

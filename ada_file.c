@@ -124,6 +124,7 @@ void adafs_put_super_hook(void)
 	int all = 1;
 	do {
 		int i;
+		all = 1;
 		wake_up_process(adafs_flusher);
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log = adafs_logs[i];
