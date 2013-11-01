@@ -28,26 +28,22 @@ struct shashtable *page_rlog = &(struct shashtable)
 		SHASHTABLE_UNINIT(RLOG_HASH_BITS);
 
 struct task_struct *adafs_flusher;
+struct completion flush_cmpl;
 
 int adafs_flush(void *data)
 {
 	int i;
 	struct adafs_log *log;
 	while (!kthread_should_stop()) {
+		INIT_COMPLETION(flush_cmpl);
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log = adafs_logs[i];
-			INIT_COMPLETION(log->l_fcmpl);
-		}
-
-		while (--i >= 0) {
-			log = adafs_logs[i];
-			while (log_flush(log, UINT_MAX, &log->l_fcmpl) == -ENODATA &&
+			while (log_flush(log, UINT_MAX) == -ENODATA &&
 					log->l_head != log->l_end) {
 				log_seal(log);
 			}
-			complete_all(&log->l_fcmpl);
 		}
-
+		complete_all(&flush_cmpl);
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
 	}
@@ -77,6 +73,7 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 	if (fops) flush_ops = *fops;
 
 	adafs_flusher = kthread_run(adafs_flush, NULL, "adafs_flusher");
+	init_completion(&flush_cmpl);
 	if (IS_ERR(adafs_flusher)) {
 		printk(KERN_ERR "[adafs] kthread_run() failed: %ld\n", PTR_ERR(adafs_flusher));
 		return PTR_ERR(adafs_flusher);
@@ -93,7 +90,7 @@ void adafs_exit_hook(void)
 	struct rlog *rl;
 
 	if (kthread_stop(adafs_flusher) != 0) {
-		printk(KERN_INFO "[adafs] adafs_flusher thread exits unclearly.");
+		printk(KERN_INFO "[adafs] adafs_flusher thread exits unclearly.\n");
 	}
 
 	i = 0;
@@ -120,18 +117,23 @@ void adafs_exit_hook(void)
 
 void adafs_put_super_hook(void)
 {
+#ifdef ADA_RELEASE
 	struct adafs_log *log;
-	int all = 1;
+	int i;
+	int done = 1;
 	do {
-		int i;
-		all = 1;
 		wake_up_process(adafs_flusher);
+		if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
+			printk(KERN_ERR "[adafs] adafs_put_super_hook "
+					"interrupted in waiting for flush_cmpl.\n");
+			return;
+		}
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log = adafs_logs[i];
-			wait_for_completion(&log->l_fcmpl);
-			if (log->l_begin != log->l_end) all = 0;
+			if (log->l_begin != log->l_end) done = 0;
 		}
-	} while (!all);
+	} while(!done);
+#endif
 }
 
 // mm/filemap.c

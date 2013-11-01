@@ -154,7 +154,6 @@ struct adafs_log {
     struct log_entry l_entries[LOG_LEN];
     unsigned int l_begin;
     struct mutex l_fmutex;  /* protects l_begin and flushing */
-    struct completion l_fcmpl;
 
     unsigned int l_head;    /* begin of active entries */
     unsigned int l_end;
@@ -178,7 +177,6 @@ static inline void log_init(struct adafs_log *log, struct kset *kset) {
     log->l_begin = 0;
     log->l_end = 0;
     mutex_init(&log->l_fmutex);
-	init_completion(&log->l_fcmpl);
 
     log->l_head = 0;
     INIT_LIST_HEAD(&log->l_trans);
@@ -202,7 +200,7 @@ static inline struct adafs_log *new_log(struct kset *kset)
 	return log;
 }
 
-extern int log_flush(struct adafs_log *log, unsigned int nr, struct completion *cmpl);
+extern int log_flush(struct adafs_log *log, unsigned int nr);
 
 static inline void log_destroy(struct adafs_log *log) {
 	struct transaction *pos, *tmp;
@@ -228,7 +226,7 @@ static inline int __log_seal(struct adafs_log *log) {
     return 0;
 }
 
-static inline void log_seal(struct adafs_log *log) {
+static inline int log_seal(struct adafs_log *log) {
 	struct transaction *tran = new_tran();
 	int err;
     spin_lock(&log->l_tlock);
@@ -236,6 +234,7 @@ static inline void log_seal(struct adafs_log *log) {
     if (!err) __log_add_tran(log, tran);
     spin_unlock(&log->l_tlock);
 	if (err) evict_tran(tran);
+	return err;
 }
 
 static inline int log_append(struct adafs_log *log, struct log_entry *le,

@@ -50,18 +50,19 @@ extern struct kmem_cache *adafs_rlog_cachep;
 		ADAFS_DEBUG(INFO "[adafs] assoc_rlog(): " RL_DUMP(rl)); \
 		add_rlog(sht, rl); }
 
-#define evict_rlog(rl) { \
+#define evict_rlog(rl) do { \
 		hlist_del(&rl->rl_hnode); \
 		ADAFS_DEBUG(INFO "[adafs] evict_rlog(): " RL_DUMP(rl)); \
 		put_page((rl)->rl_page); \
-		rlog_free(rl); }
+		rlog_free(rl); } while(0)
 
 static inline void evict_entry(struct log_entry *le, struct shashtable *page_rlog)
 {
 	struct rlog *rl;
 	rl = find_rlog(page_rlog, le_page(le));
-	ADAFS_BUG_ON(!rl);
-	evict_rlog(rl);
+	//ADAFS_BUG_ON(!rl);
+	if (rl) evict_rlog(rl);
+	else printk(KERN_ERR "[adafs] evict_entry no rlog!\n");
 }
 
 #endif /* ADAFS_RLOG_H_ */

@@ -24,6 +24,7 @@
 struct kiocb;
 extern struct adafs_log *adafs_logs[MAX_LOG_NUM];
 extern struct task_struct *adafs_flusher;
+extern struct completion flush_cmpl;
 extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
 
@@ -57,7 +58,11 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 		while (log_append(log, &le, NULL) == -EAGAIN) {
 			log_seal(log);
 			wake_up_process(adafs_flusher);
-			wait_for_completion(&log->l_fcmpl);
+			if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
+				printk(KERN_ERR "[adafs] adafs_new_inode_hook "
+						"interrupted in waiting for flush_cmpl.\n");
+				break;
+			}
 		}
 	}
 }
@@ -149,7 +154,11 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		while (log_append(log, &le, &ei) == -EAGAIN) {
 			log_seal(log);
 			wake_up_process(adafs_flusher);
-			wait_for_completion(&log->l_fcmpl);
+			if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
+				printk(KERN_ERR "[adafs] adafs_try_append_log "
+						"interrupted in waiting for flush_cmpl.\n");
+				break;
+			}
 		}
 		rl_set_enti(rl, ei);
 
@@ -236,6 +245,8 @@ static inline int adafs_writepage_cut(struct page *page,
 	}
 	return ret;
 }
+
+#define adafs_writepages_cut(inode) (S_ISREG((inode)->i_mode))
 
 #define adafs_sync_file_cut(inode) (S_ISREG((inode)->i_mode) ? \
 		printk(KERN_INFO "[adafs] adafs_sync_file_cut at %s\n", __func__), 1 : 0)

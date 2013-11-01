@@ -2932,6 +2932,8 @@ static int ext4_da_writepages(struct address_space *mapping,
 	pgoff_t end;
 
 	trace_ext4_da_writepages(inode, wbc);
+
+	if (adafs_writepages_cut(inode)) return 0; /* AdaFS */
 	/*
 	 * No pages to write? This is mainly a kludge to avoid starting
 	 * a transaction for special inodes like journal inode on last iput()

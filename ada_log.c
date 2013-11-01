@@ -164,8 +164,7 @@ static inline int do_trans_end(handle_t *handle) {
 		for (le = &entry(i = (begin)); seq_less(i, end); le = &entry(++i))
 
 static int __merge_flush(struct adafs_log *log,
-		const unsigned int begin, const unsigned int end,
-		struct completion *cmpl) {
+		const unsigned int begin, const unsigned int end) {
 	struct log_entry *entries = log->l_entries;
 	struct log_entry *le;
 	struct inode *inode;
@@ -223,7 +222,10 @@ static int __merge_flush(struct adafs_log *log,
 				if (le_inval(le)) continue;
 				err = do_le_flush(handle, le, &wbc);
 				if (unlikely(err)) {
+					PRINT(ERR "[adafs] entry_flush failed: %d\n", err);
 					PRINT(ERR "[adafs] entry_flush failed: " LE_DUMP(le));
+					le_set_inval(le);
+					evict_entry(le, page_rlog);
 				}
 			}
 			err = do_trans_end(handle);
@@ -236,8 +238,6 @@ static int __merge_flush(struct adafs_log *log,
 			}
 
 			log->l_begin = e;
-			complete_all(cmpl);
-			INIT_COMPLETION(*cmpl);
 
 			mutex_lock(&inode->i_mutex);
 			__do_wait_sync(inode, commit_tid);
@@ -247,7 +247,7 @@ static int __merge_flush(struct adafs_log *log,
 	return err;
 }
 
-int log_flush(struct adafs_log *log, unsigned int nr, struct completion *cmpl) {
+int log_flush(struct adafs_log *log, unsigned int nr) {
     unsigned int begin, end;
     int err = 0;
     struct transaction *tran;
@@ -266,13 +266,14 @@ int log_flush(struct adafs_log *log, unsigned int nr, struct completion *cmpl) {
     }
     spin_unlock(&log->l_tlock);
     if (begin == end) {
-    	PRINT(WARNING "[adafs] No transaction flushed: l_begin = %u\n", begin);
+    	PRINT(WARNING "[adafs] No transaction flushed: l_begin=%u, l_head=%u, l_end=%u\n",
+    			log->l_begin, log->l_head, log->l_end);
         return -ENODATA;
     }
 
     mutex_lock(&log->l_fmutex);
     __log_sort(log, begin, end);
-    err = __merge_flush(log, begin, end, cmpl);
+    err = __merge_flush(log, begin, end);
     mutex_unlock(&log->l_fmutex);
     return err;
 }
@@ -294,7 +295,6 @@ static ssize_t staleness_sum_store(struct adafs_log *log, const char *buf, size_
 		return -EINVAL;
 
 	wake_up_process(adafs_flusher);
-	wait_for_completion_timeout(&log->l_fcmpl, HZ);
     return len;
 }
 
