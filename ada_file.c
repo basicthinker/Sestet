@@ -82,7 +82,8 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 		return PTR_ERR(adafs_flusher);
 	}
 
-	adafs_trace_open(&adafs_trace, TRACE_FILE_PATH);
+	err = adafs_trace_open(&adafs_trace, TRACE_FILE_PATH);
+	if (err) printk(KERN_ERR "[adafs] adafs_trace_open() failed: %d\n", err);
 	return 0;
 }
 

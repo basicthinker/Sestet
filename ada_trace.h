@@ -29,7 +29,7 @@ static inline int adafs_trace_open(struct adafs_trace *trace, const char *filena
 #ifdef ADA_TRACE
 	if (strnlen(filename, FNAME_MAX_LEN) == FNAME_MAX_LEN) return -EINVAL;
 	strcpy(trace->tr_name, filename);
-	trace->tr_filp = filp_open(filename, O_APPEND | O_CREAT, 0644);
+	trace->tr_filp = filp_open(filename, O_WRONLY | O_APPEND | O_CREAT, 0644);
 	trace->tr_len = 0;
 	spin_lock_init(&trace->tr_lock);
 	if (IS_ERR(trace->tr_filp)) {
@@ -55,6 +55,8 @@ static inline int adafs_trace_write(struct adafs_trace *trace,
 	loff_t pos;
 	struct timeval tv;
 	mm_segment_t fs = get_fs();
+	if (!trace->tr_filp) return ret;
+
 	set_fs(get_ds());
 	do_gettimeofday(&tv);
 	spin_lock(&trace->tr_lock);
