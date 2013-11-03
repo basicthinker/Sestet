@@ -30,6 +30,9 @@ struct shashtable *page_rlog = &(struct shashtable)
 struct task_struct *adafs_flusher;
 struct completion flush_cmpl;
 
+#define TRACE_FILE_PATH "/var/log/adafs.trace"
+struct adafs_trace adafs_trace;
+
 int adafs_flush(void *data)
 {
 	int i;
@@ -78,6 +81,8 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 		printk(KERN_ERR "[adafs] kthread_run() failed: %ld\n", PTR_ERR(adafs_flusher));
 		return PTR_ERR(adafs_flusher);
 	}
+
+	adafs_trace_open(&adafs_trace, TRACE_FILE_PATH);
 	return 0;
 }
 
@@ -113,6 +118,8 @@ void adafs_exit_hook(void)
 		kfree(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
+
+	adafs_trace_close(&adafs_trace);
 }
 
 void adafs_put_super_hook(void)
@@ -229,6 +236,8 @@ again:
 
 		/* AdaFS */
 		adafs_try_append_log(mapping->host, rl, offset, copied);
+		adafs_trace_page(&adafs_trace, TE_WRITE,
+				mapping->host->i_ino, page->index, TE_HIT_UNKNOWN);
 
 //		balance_dirty_pages_ratelimited(mapping);
 

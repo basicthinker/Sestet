@@ -17,6 +17,7 @@
 #include "ada_log.h"
 #include "ada_rlog.h"
 #include "ada_policy.h"
+#include "ada_trace.h"
 
 #define MAX_LOG_NUM 16
 #define RLOG_HASH_BITS 10
@@ -27,6 +28,7 @@ extern struct task_struct *adafs_flusher;
 extern struct completion flush_cmpl;
 extern struct kmem_cache *adafs_rlog_cachep;
 extern struct shashtable *page_rlog;
+extern struct adafs_trace adafs_trace;
 
 struct flush_operations {
 	handle_t *(*trans_begin)(struct inode *inode, int nles);

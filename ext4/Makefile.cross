@@ -15,6 +15,7 @@ eafs-$(CONFIG_EXT4_FS_SECURITY)		+= xattr_security.o
 
 #ccflags-y += -DADA_DEBUG
 ccflags-y += -DADA_RELEASE
+ccflags-y += -DADA_TRACE
 
 KSRC = /usr/src/GT-I9260_CHN_JB/Kernel/
 
