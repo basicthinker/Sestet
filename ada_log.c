@@ -168,8 +168,9 @@ static int __merge_flush(struct adafs_log *log,
 	struct log_entry *entries = log->l_entries;
 	struct log_entry *le;
 	struct inode *inode;
+	/* Commented for trace version
 	handle_t *handle;
-	tid_t commit_tid;
+	tid_t commit_tid; */
 	unsigned int b, e, i, nles;
 	int err = 0;
 	unsigned long ino;
@@ -181,12 +182,13 @@ static int __merge_flush(struct adafs_log *log,
 		} else if (le_meta(le)) {
 			e = b + 1;
 		} else { // to flush a group of entries
+			/* Commented for trace version
 			struct blk_plug plug;
 			struct writeback_control wbc = {
 					.sync_mode = WB_SYNC_ALL,
 					.nr_to_write = LONG_MAX,
 					.range_start = 0,
-					.range_end = LLONG_MAX };
+					.range_end = LLONG_MAX }; */
 
 			le = &entry(b);
 			ino = le_ino(le);
@@ -210,6 +212,7 @@ static int __merge_flush(struct adafs_log *log,
 				}
 			} // for
 			e = i;
+			/* Commented for trace version
 			PRINT("[adafs] __merge_flush() begins flushing: ino=%lu "
 					"begin=%u, end=%u, num=%u\n", ino, b, e, nles);
 
@@ -229,19 +232,21 @@ static int __merge_flush(struct adafs_log *log,
 				}
 			}
 			err = do_trans_end(handle);
-			blk_finish_plug(&plug);
+			blk_finish_plug(&plug); */
 
 			le_for_each(le, i, b, e) {
 				if (le_inval(le)) continue;
-				wait_on_page_writeback(le_page(le));
+				/* Commented for trace version
+				wait_on_page_writeback(le_page(le)); */
 				evict_entry(le, page_rlog);
 			}
 
 			log->l_begin = e;
 
+			/* Commented for trace version
 			mutex_lock(&inode->i_mutex);
 			__do_wait_sync(inode, commit_tid);
-			mutex_unlock(&inode->i_mutex);
+			mutex_unlock(&inode->i_mutex); */
 		}
 	} // for all target entries
 	return err;

@@ -56,7 +56,7 @@ extern struct kmem_cache *adafs_rlog_cachep;
 		put_page((rl)->rl_page); \
 		rlog_free(rl); } while(0)
 
-static inline void evict_entry(struct log_entry *le, struct shashtable *page_rlog)
+static inline void evict_entry(const struct log_entry *le, struct shashtable *page_rlog)
 {
 	struct rlog *rl;
 	rl = find_rlog(page_rlog, le_page(le));
