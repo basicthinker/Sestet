@@ -5,7 +5,7 @@ if [ $# -ne 1 ]; then
 	exit -1
 fi
 
-lib_files=(shashtable.h ada_log.c ada_log.h ada_file.c ada_fs.h ada_rlog.h ada_sys.h)
+lib_files=(ada_trace.h shashtable.h ada_log.c ada_log.h ada_file.c ada_fs.h ada_rlog.h ada_sys.h)
 
 for ((i=0;i<${#lib_files[*]};i=i+1))
 do
