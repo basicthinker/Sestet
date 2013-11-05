@@ -28,8 +28,8 @@ extern struct flush_operations flush_ops;
 extern struct kobj_type adafs_la_ktype;
 
 #if !defined(LOG_LEN) || !defined(LOG_MASK)
-    #define LOG_LEN 32768 // 32k * 4KB = 128MB
-    #define LOG_MASK 32767
+    #define LOG_LEN 16384 // 16k * 4KB = 64MB
+    #define LOG_MASK 16383
 #endif
 
 #define L_INDEX(p)  ((p) & LOG_MASK)
@@ -227,13 +227,11 @@ static inline int __log_seal(struct adafs_log *log) {
 }
 
 static inline int log_seal(struct adafs_log *log) {
-	struct transaction *tran = new_tran();
 	int err;
     spin_lock(&log->l_tlock);
     err = __log_seal(log);
-    if (!err) __log_add_tran(log, tran);
+    if (!err) __log_add_tran(log, new_tran());
     spin_unlock(&log->l_tlock);
-	if (err) evict_tran(tran);
 	return err;
 }
 

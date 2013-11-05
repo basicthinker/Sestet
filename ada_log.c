@@ -178,9 +178,11 @@ static int __merge_flush(struct adafs_log *log,
 	for (b = begin; seq_less(b, end); b = e) {
 		le = &entry(b);
 		if (unlikely(le_inval(le))) {
+			log->l_begin = end;
 			break;
 		} else if (le_meta(le)) {
 			e = b + 1;
+			continue;
 		} else { // to flush a group of entries
 			/* Commented for trace version
 			struct blk_plug plug;
@@ -192,8 +194,6 @@ static int __merge_flush(struct adafs_log *log,
 
 			le = &entry(b);
 			ino = le_ino(le);
-			ADAFS_DEBUG(KERN_DEBUG "[adafs-debug] __merge_flush() gets sb from page: "
-					LE_DUMP_PAGE(le));
 			inode = le_page(le)->mapping->host;
 
 			nles = 1; // counts pages to flush
