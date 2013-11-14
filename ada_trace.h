@@ -22,7 +22,7 @@ struct adafs_trace {
 	char tr_name[FNAME_MAX_LEN];
 	struct file *tr_filp;
 	unsigned long long tr_len;
-	spinlock_t tr_lock;
+	struct mutex tr_mtx;
 };
 
 static inline int adafs_trace_open(struct adafs_trace *trace, const char *filename) {
@@ -31,18 +31,20 @@ static inline int adafs_trace_open(struct adafs_trace *trace, const char *filena
 	strcpy(trace->tr_name, filename);
 	trace->tr_filp = filp_open(filename, O_WRONLY | O_APPEND | O_CREAT, 0644);
 	trace->tr_len = 0;
-	spin_lock_init(&trace->tr_lock);
+	mutex_init(&trace->tr_mtx);
 	if (IS_ERR(trace->tr_filp)) {
 		trace->tr_name[0] = '\0';
 		trace->tr_filp = NULL;
 		return PTR_ERR(trace->tr_filp);
 	}
+	printk(KERN_INFO "[adafs] AdaFS tracing is up.\n");
 #endif
 	return 0;
 }
 
 static inline void adafs_trace_close(struct adafs_trace *trace) {
 #ifdef ADA_TRACE
+	if (!trace->tr_filp) return;
 	vfs_fsync(trace->tr_filp, 0);
 	filp_close(trace->tr_filp, NULL);
 #endif
@@ -59,12 +61,12 @@ static inline int adafs_trace_write(struct adafs_trace *trace,
 
 	set_fs(get_ds());
 	do_gettimeofday(&tv);
-	spin_lock(&trace->tr_lock);
+	mutex_lock(&trace->tr_mtx);
 	ret = vfs_write(trace->tr_filp, (const char *)&header, sizeof(header), &pos);
 	if (ret > 0) ret = vfs_write(trace->tr_filp, (const char *)&tv, sizeof(tv), &pos);
 	if (ret > 0) ret = vfs_write(trace->tr_filp, data, size, &pos);
 	if (ret > 0) trace->tr_len += (sizeof(header) + sizeof(tv) + size);
-	spin_unlock(&trace->tr_lock);
+	mutex_unlock(&trace->tr_mtx);
 
 	set_fs(fs);
 

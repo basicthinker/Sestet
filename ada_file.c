@@ -30,7 +30,7 @@ struct shashtable *page_rlog = &(struct shashtable)
 struct task_struct *adafs_flusher;
 struct completion flush_cmpl;
 
-#define TRACE_FILE_PATH "/var/log/adafs.trace"
+#define TRACE_FILE_PATH "/cache/adafs.trace"
 struct adafs_trace adafs_trace;
 
 int adafs_flush(void *data)

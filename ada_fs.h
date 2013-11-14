@@ -58,7 +58,6 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 		le_set_ino(&le, new_inode->i_ino);
 		le_set_meta(&le);
 		while (log_append(log, &le, NULL) == -EAGAIN) {
-			log_seal(log);
 			wake_up_process(adafs_flusher);
 			if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
 				printk(KERN_ERR "[adafs] adafs_new_inode_hook "
@@ -154,7 +153,6 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		else printk(KERN_DEBUG "[adafs] NP 2: %p\n", rl_page(rl));
 #endif
 		while (log_append(log, &le, &ei) == -EAGAIN) {
-			log_seal(log);
 			wake_up_process(adafs_flusher);
 			if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
 				printk(KERN_ERR "[adafs] adafs_try_append_log "

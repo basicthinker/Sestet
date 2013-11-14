@@ -228,10 +228,14 @@ static inline int __log_seal(struct adafs_log *log) {
 
 static inline int log_seal(struct adafs_log *log) {
 	int err;
-    spin_lock(&log->l_tlock);
+	struct transaction *tran = new_tran(); // should not in atomic
+
+	spin_lock(&log->l_tlock);
     err = __log_seal(log);
-    if (!err) __log_add_tran(log, new_tran());
+    if (likely(!err)) __log_add_tran(log, tran);
     spin_unlock(&log->l_tlock);
+
+    if (unlikely(err)) evict_tran(tran);
 	return err;
 }
 
