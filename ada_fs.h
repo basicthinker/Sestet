@@ -198,7 +198,7 @@ static inline void adafs_truncate_hook(struct inode *inode,
 			le_set_inval(le);
 			evict_entry(le, page_rlog);
 			on_evict_page(log, le_len(le));
-			adafs_trace_page(&adafs_trace, TE_EVICT, inode->i_ino, le_pgi(le), TE_HIT_UNKNOWN);
+			adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, le_pgi(le), TE_HIT_UNKNOWN);
 		}
 	}
 	mutex_unlock(&log->l_fmutex);

@@ -50,55 +50,55 @@ static inline void adafs_trace_close(struct adafs_trace *trace) {
 #endif
 }
 
-static inline int adafs_trace_write(struct adafs_trace *trace,
-		const char header, void *data, size_t size) {
+static inline int adafs_trace_output(struct adafs_trace *trace,
+		void *data, size_t size) {
 	int ret = 0;
 #ifdef ADA_TRACE
-	loff_t pos;
 	struct timeval tv;
 	mm_segment_t fs = get_fs();
-	if (!trace->tr_filp) return ret;
+	struct file *filp = trace->tr_filp;
+	if (!filp) return ret;
 
 	set_fs(get_ds());
 	do_gettimeofday(&tv);
 	mutex_lock(&trace->tr_mtx);
-	ret = vfs_write(trace->tr_filp, (const char *)&header, sizeof(header), &pos);
-	if (ret > 0) ret = vfs_write(trace->tr_filp, (const char *)&tv, sizeof(tv), &pos);
-	if (ret > 0) ret = vfs_write(trace->tr_filp, data, size, &pos);
-	if (ret > 0) trace->tr_len += (sizeof(header) + sizeof(tv) + size);
+	ret = vfs_write(filp, (const char *)&tv, sizeof(tv), &filp->f_pos);
+	if (ret > 0) ret = vfs_write(filp, data, size, &filp->f_pos);
+	if (ret > 0) trace->tr_len += (sizeof(tv) + size);
 	mutex_unlock(&trace->tr_mtx);
-
 	set_fs(fs);
 
 	if (ret > 0 && trace->tr_len >= FLUSH_LEN) {
-		vfs_fsync(trace->tr_filp, 0);
+		vfs_fsync(filp, 0);
 		trace->tr_len = 0;
 	}
 #endif
 	return ret;
 }
 
-#define TE_READ  'r'
-#define TE_WRITE 'w'
-#define TE_EVICT 'e'
+#define TE_TYPE_READ  'r'
+#define TE_TYPE_WRITE 'w'
+#define TE_TYPE_EVICT 'e'
 
 #define TE_HIT_YES     'y'
 #define TE_HIT_NO      'n'
 #define TE_HIT_UNKNOWN 'u'
 
 struct te_page {
+	char te_type;
 	char te_hit;
 	unsigned long te_ino;
 	unsigned long te_pgi;
 };
 
-static inline void adafs_trace_page(struct adafs_trace *trace, char header,
+static inline void adafs_trace_page(struct adafs_trace *trace, char te_type,
 		unsigned long te_ino, unsigned long te_pgi, char te_hit) {
 #ifdef ADA_TRACE
-	struct te_page te = { .te_ino = te_ino, .te_pgi = te_pgi, .te_hit = te_hit };
-	int err = adafs_trace_write(trace, header, &te, sizeof(te));
+	struct te_page te = { .te_type = te_type, .te_hit = te_hit,
+			.te_ino = te_ino, .te_pgi = te_pgi };
+	int err = adafs_trace_output(trace, &te, sizeof(te));
 	if (err < 0) {
-		printk(KERN_ERR "[adafs] adafs_trace_write() failed: %d\n", err);
+		printk(KERN_ERR "[adafs] adafs_trace_output() failed: %d\n", err);
 	}
 #endif
 }
