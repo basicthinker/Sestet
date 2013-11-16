@@ -122,7 +122,6 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		unsigned long offset, unsigned long copied)
 {
-	int err = 0;
 	unsigned int li = (unsigned int)(long)host->i_private;
 	struct adafs_log *log = adafs_logs[li];
 
@@ -134,6 +133,7 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		printk(KERN_DEBUG "[adafs] AP 2: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
 		on_write_old_page(log, copied);
+		return TE_HIT_YES;
 	} else {
 		unsigned int ei = L_NULL, pgv;
 		struct log_entry le = LE_INITIALIZER;
@@ -163,8 +163,8 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		rl_set_enti(rl, ei);
 
 		on_write_new_page(log, copied);
+		return TE_HIT_NO;
 	}
-	return err;
 }
 
 // Put before truncate and free related pages

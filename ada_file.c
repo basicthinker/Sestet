@@ -236,9 +236,11 @@ again:
 		written += copied;
 
 		/* AdaFS */
-		adafs_try_append_log(mapping->host, rl, offset, copied);
-		adafs_trace_page(&adafs_trace, TE_TYPE_WRITE,
-				mapping->host->i_ino, page->index, TE_HIT_UNKNOWN);
+		{
+			int hit = adafs_try_append_log(mapping->host, rl, offset, copied);
+			adafs_trace_page(&adafs_trace, TE_TYPE_WRITE,
+					mapping->host->i_ino, page->index, (char)hit);
+		}
 
 //		balance_dirty_pages_ratelimited(mapping);
 
