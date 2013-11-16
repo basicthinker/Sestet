@@ -33,6 +33,8 @@ struct completion flush_cmpl;
 #define TRACE_FILE_PATH "/cache/adafs.trace"
 struct adafs_trace adafs_trace;
 
+extern struct kobj_type adafs_ta_ktype; // in this file
+
 int adafs_flush(void *data)
 {
 	int i;
@@ -72,6 +74,7 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 	err = kobject_init_and_add(&adafs_logs[0]->l_kobj, &adafs_la_ktype, NULL,
 	            "log%d", 0);
 	if (err) printk(KERN_ERR "[adafs] kobject_init_and_add() failed for log0\n");
+	else init_completion(&adafs_logs[0]->l_kobj_unregister);
 
 	if (fops) flush_ops = *fops;
 
@@ -82,8 +85,14 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 		return PTR_ERR(adafs_flusher);
 	}
 
-	err = adafs_trace_open(&adafs_trace, TRACE_FILE_PATH);
+	err = adafs_trace_open(&adafs_trace, TRACE_FILE_PATH, kset);
 	if (err) printk(KERN_ERR "[adafs] adafs_trace_open() failed: %d\n", err);
+
+#ifdef ADA_TRACE
+	err = kobject_init_and_add(&adafs_trace.tr_kobj, &adafs_ta_ktype, NULL, "trace");
+	if (err) printk(KERN_ERR "[adafs] kobject_init_and_add() failed for trace\n");
+	else init_completion(&adafs_trace.tr_kobj_unregister);
+#endif
 	return 0;
 }
 
@@ -116,11 +125,16 @@ void adafs_exit_hook(void)
 
 	for (i = 0; i < atomic_read(&num_logs); ++i) {
 		log_destroy(adafs_logs[i]);
+		kobject_put(&adafs_logs[i]->l_kobj);
+		wait_for_completion(&adafs_logs[i]->l_kobj_unregister);
+
 		kfree(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
 
 	adafs_trace_close(&adafs_trace);
+	kobject_put(&adafs_trace.tr_kobj);
+	wait_for_completion(&adafs_trace.tr_kobj_unregister);
 }
 
 void adafs_put_super_hook(void)
@@ -373,3 +387,451 @@ ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	return ret;
 }
 
+/*
+ * CD/DVDs are error prone. When a medium error occurs, the driver may fail
+ * a _large_ part of the i/o request. Imagine the worst scenario:
+ *
+ *      ---R__________________________________________B__________
+ *         ^ reading here                             ^ bad block(assume 4k)
+ *
+ * read(R) => miss => readahead(R...B) => media error => frustrating retries
+ * => failing the whole request => read(R) => read(R+1) =>
+ * readahead(R+1...B+1) => bang => read(R+2) => read(R+3) =>
+ * readahead(R+3...B+2) => bang => read(R+3) => read(R+4) =>
+ * readahead(R+4...B+3) => bang => read(R+4) => read(R+5) => ......
+ *
+ * It is going insane. Fix it by quickly scaling down the readahead size.
+ */
+static void shrink_readahead_size_eio(struct file *filp,
+					struct file_ra_state *ra)
+{
+	ra->ra_pages /= 4;
+}
+
+/**
+ * do_generic_file_read - generic file read routine
+ * @filp:	the file to read
+ * @ppos:	current file position
+ * @desc:	read_descriptor
+ * @actor:	read method
+ *
+ * This is a generic file read routine, and uses the
+ * mapping->a_ops->readpage() function for the actual low-level stuff.
+ *
+ * This is really ugly. But the goto's actually try to clarify some
+ * of the logic when it comes to error handling etc.
+ */
+static void do_generic_file_read(struct file *filp, loff_t *ppos,
+		read_descriptor_t *desc, read_actor_t actor)
+{
+	struct address_space *mapping = filp->f_mapping;
+	struct inode *inode = mapping->host;
+	struct file_ra_state *ra = &filp->f_ra;
+	pgoff_t index;
+	pgoff_t last_index;
+	pgoff_t prev_index;
+	unsigned long offset;      /* offset into pagecache page */
+	unsigned int prev_offset;
+	int error;
+
+	index = *ppos >> PAGE_CACHE_SHIFT;
+	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
+	prev_offset = ra->prev_pos & (PAGE_CACHE_SIZE-1);
+	last_index = (*ppos + desc->count + PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT;
+	offset = *ppos & ~PAGE_CACHE_MASK;
+
+	for (;;) {
+		struct page *page;
+		pgoff_t end_index;
+		loff_t isize;
+		unsigned long nr, ret;
+
+		cond_resched();
+find_page:
+		page = find_get_page(mapping, index);
+		if (!page) {
+			/* AdaFS */
+			adafs_trace_page(&adafs_trace, TE_TYPE_READ,
+					inode->i_ino, index, TE_HIT_NO);
+			page_cache_sync_readahead(mapping,
+					ra, filp,
+					index, last_index - index);
+			page = find_get_page(mapping, index);
+			if (unlikely(page == NULL))
+				goto no_cached_page;
+		} else { /* AdaFS */
+			adafs_trace_page(&adafs_trace, TE_TYPE_READ,
+					inode->i_ino, index, TE_HIT_YES);
+		}
+		if (PageReadahead(page)) {
+			page_cache_async_readahead(mapping,
+					ra, filp, page,
+					index, last_index - index);
+		}
+		if (!PageUptodate(page)) {
+			if (inode->i_blkbits == PAGE_CACHE_SHIFT ||
+					!mapping->a_ops->is_partially_uptodate)
+				goto page_not_up_to_date;
+			if (!trylock_page(page))
+				goto page_not_up_to_date;
+			/* Did it get truncated before we got the lock? */
+			if (!page->mapping)
+				goto page_not_up_to_date_locked;
+			if (!mapping->a_ops->is_partially_uptodate(page,
+								desc, offset))
+				goto page_not_up_to_date_locked;
+			unlock_page(page);
+		}
+page_ok:
+		/*
+		 * i_size must be checked after we know the page is Uptodate.
+		 *
+		 * Checking i_size after the check allows us to calculate
+		 * the correct value for "nr", which means the zero-filled
+		 * part of the page is not copied back to userspace (unless
+		 * another truncate extends the file - this is desired though).
+		 */
+
+		isize = i_size_read(inode);
+		end_index = (isize - 1) >> PAGE_CACHE_SHIFT;
+		if (unlikely(!isize || index > end_index)) {
+			page_cache_release(page);
+			goto out;
+		}
+
+		/* nr is the maximum number of bytes to copy from this page */
+		nr = PAGE_CACHE_SIZE;
+		if (index == end_index) {
+			nr = ((isize - 1) & ~PAGE_CACHE_MASK) + 1;
+			if (nr <= offset) {
+				page_cache_release(page);
+				goto out;
+			}
+		}
+		nr = nr - offset;
+
+		/* If users can be writing to this page using arbitrary
+		 * virtual addresses, take care about potential aliasing
+		 * before reading the page on the kernel side.
+		 */
+		if (mapping_writably_mapped(mapping))
+			flush_dcache_page(page);
+
+		/*
+		 * When a sequential read accesses a page several times,
+		 * only mark it as accessed the first time.
+		 */
+		if (prev_index != index || offset != prev_offset)
+			mark_page_accessed(page);
+		prev_index = index;
+
+		/*
+		 * Ok, we have the page, and it's up-to-date, so
+		 * now we can copy it to user space...
+		 *
+		 * The actor routine returns how many bytes were actually used..
+		 * NOTE! This may not be the same as how much of a user buffer
+		 * we filled up (we may be padding etc), so we can only update
+		 * "pos" here (the actor routine has to update the user buffer
+		 * pointers and the remaining count).
+		 */
+		ret = actor(desc, page, offset, nr);
+		offset += ret;
+		index += offset >> PAGE_CACHE_SHIFT;
+		offset &= ~PAGE_CACHE_MASK;
+		prev_offset = offset;
+
+		page_cache_release(page);
+		if (ret == nr && desc->count)
+			continue;
+		goto out;
+
+page_not_up_to_date:
+		/* Get exclusive access to the page ... */
+		error = lock_page_killable(page);
+		if (unlikely(error))
+			goto readpage_error;
+
+page_not_up_to_date_locked:
+		/* Did it get truncated before we got the lock? */
+		if (!page->mapping) {
+			unlock_page(page);
+			page_cache_release(page);
+			continue;
+		}
+
+		/* Did somebody else fill it already? */
+		if (PageUptodate(page)) {
+			unlock_page(page);
+			goto page_ok;
+		}
+
+readpage:
+		/*
+		 * A previous I/O error may have been due to temporary
+		 * failures, eg. multipath errors.
+		 * PG_error will be set again if readpage fails.
+		 */
+		ClearPageError(page);
+		/* Start the actual read. The read will unlock the page. */
+		error = mapping->a_ops->readpage(filp, page);
+
+		if (unlikely(error)) {
+			if (error == AOP_TRUNCATED_PAGE) {
+				page_cache_release(page);
+				goto find_page;
+			}
+			goto readpage_error;
+		}
+
+		if (!PageUptodate(page)) {
+			error = lock_page_killable(page);
+			if (unlikely(error))
+				goto readpage_error;
+			if (!PageUptodate(page)) {
+				if (page->mapping == NULL) {
+					/*
+					 * invalidate_mapping_pages got it
+					 */
+					unlock_page(page);
+					page_cache_release(page);
+					goto find_page;
+				}
+				unlock_page(page);
+				shrink_readahead_size_eio(filp, ra);
+				error = -EIO;
+				goto readpage_error;
+			}
+			unlock_page(page);
+		}
+
+		goto page_ok;
+
+readpage_error:
+		/* UHHUH! A synchronous read error occurred. Report it */
+		desc->error = error;
+		page_cache_release(page);
+		goto out;
+
+no_cached_page:
+		/*
+		 * Ok, it wasn't cached, so we need to create a new
+		 * page..
+		 */
+		page = page_cache_alloc_cold(mapping);
+		if (!page) {
+			desc->error = -ENOMEM;
+			goto out;
+		}
+		error = add_to_page_cache_lru(page, mapping,
+						index, GFP_KERNEL);
+		if (error) {
+			page_cache_release(page);
+			if (error == -EEXIST)
+				goto find_page;
+			desc->error = error;
+			goto out;
+		}
+		goto readpage;
+	}
+
+out:
+	ra->prev_pos = prev_index;
+	ra->prev_pos <<= PAGE_CACHE_SHIFT;
+	ra->prev_pos |= prev_offset;
+
+	*ppos = ((loff_t)index << PAGE_CACHE_SHIFT) + offset;
+	file_accessed(filp);
+}
+
+int file_read_actor(read_descriptor_t *desc, struct page *page,
+			unsigned long offset, unsigned long size)
+{
+	char *kaddr;
+	unsigned long left, count = desc->count;
+
+	if (size > count)
+		size = count;
+
+	/*
+	 * Faults on the destination of a read are common, so do it before
+	 * taking the kmap.
+	 */
+	if (!fault_in_pages_writeable(desc->arg.buf, size)) {
+		kaddr = kmap_atomic(page, KM_USER0);
+		left = __copy_to_user_inatomic(desc->arg.buf,
+						kaddr + offset, size);
+		kunmap_atomic(kaddr, KM_USER0);
+		if (left == 0)
+			goto success;
+	}
+
+	/* Do it the slow way */
+	kaddr = kmap(page);
+	left = __copy_to_user(desc->arg.buf, kaddr + offset, size);
+	kunmap(page);
+
+	if (left) {
+		size -= left;
+		desc->error = -EFAULT;
+	}
+success:
+	desc->count = count - size;
+	desc->written += size;
+	desc->arg.buf += size;
+	return size;
+}
+
+/**
+ * generic_file_aio_read - generic filesystem read routine
+ * @iocb:	kernel I/O control block
+ * @iov:	io vector request
+ * @nr_segs:	number of segments in the iovec
+ * @pos:	current file position
+ *
+ * This is the "read()" routine for all filesystems
+ * that can use the page cache directly.
+ */
+ssize_t
+adafs_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
+		unsigned long nr_segs, loff_t pos)
+{
+	struct file *filp = iocb->ki_filp;
+	ssize_t retval;
+	unsigned long seg = 0;
+	size_t count;
+	loff_t *ppos = &iocb->ki_pos;
+
+	count = 0;
+	retval = generic_segment_checks(iov, &nr_segs, &count, VERIFY_WRITE);
+	if (retval)
+		return retval;
+
+
+	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
+	if (filp->f_flags & O_DIRECT) {
+		loff_t size;
+		struct address_space *mapping;
+		struct inode *inode;
+
+		mapping = filp->f_mapping;
+		inode = mapping->host;
+		if (!count)
+			goto out; /* skip atime */
+		size = i_size_read(inode);
+		if (pos < size) {
+			retval = filemap_write_and_wait_range(mapping, pos,
+					pos + iov_length(iov, nr_segs) - 1);
+			if (!retval) {
+				struct blk_plug plug;
+
+				blk_start_plug(&plug);
+				retval = mapping->a_ops->direct_IO(READ, iocb,
+							iov, pos, nr_segs);
+				blk_finish_plug(&plug);
+			}
+			if (retval > 0) {
+				*ppos = pos + retval;
+				count -= retval;
+			}
+
+			/*
+			 * Btrfs can have a short DIO read if we encounter
+			 * compressed extents, so if there was an error, or if
+			 * we've already read everything we wanted to, or if
+			 * there was a short read because we hit EOF, go ahead
+			 * and return.  Otherwise fallthrough to buffered io for
+			 * the rest of the read.
+			 */
+			if (retval < 0 || !count || *ppos >= size) {
+				file_accessed(filp);
+				goto out;
+			}
+		}
+	}
+
+	count = retval;
+	for (seg = 0; seg < nr_segs; seg++) {
+		read_descriptor_t desc;
+		loff_t offset = 0;
+
+		/*
+		 * If we did a short DIO read we need to skip the section of the
+		 * iov that we've already read data into.
+		 */
+		if (count) {
+			if (count > iov[seg].iov_len) {
+				count -= iov[seg].iov_len;
+				continue;
+			}
+			offset = count;
+			count = 0;
+		}
+
+		desc.written = 0;
+		desc.arg.buf = iov[seg].iov_base + offset;
+		desc.count = iov[seg].iov_len - offset;
+		if (desc.count == 0)
+			continue;
+		desc.error = 0;
+		do_generic_file_read(filp, ppos, &desc, file_read_actor);
+		retval += desc.written;
+		if (desc.error) {
+			retval = retval ?: desc.error;
+			break;
+		}
+		if (desc.count > 0)
+			break;
+	}
+out:
+	return retval;
+}
+
+#ifdef ADA_TRACE
+static struct attribute adafs_tracing_on = {
+		.name = "tracing_on", .mode = 0644 };
+
+static struct attribute *adafs_trace_attrs[] = {
+		&adafs_tracing_on,
+		NULL,
+};
+
+static ssize_t adafs_ta_show(struct kobject *kobj,
+		struct attribute *attr, char *buf)
+{
+	if (strcmp(attr->name, "tracing_on") == 0) {
+		return snprintf(buf, PAGE_SIZE, "%u\n", adafs_trace.tr_on);
+	}
+	return -EINVAL;
+}
+
+static ssize_t adafs_ta_store(struct kobject *kobj,
+		struct attribute *attr, const char *buf, size_t len)
+{
+	if (strcmp(attr->name, "tracing_on") == 0) {
+		unsigned int req;
+
+		if (kstrtouint(buf, 0, &req) || req > 1)
+			return -EINVAL;
+
+		adafs_trace.tr_on = req;
+	}
+	return -EINVAL;
+}
+
+static const struct sysfs_ops adafs_ta_ops = {
+	.show	= adafs_ta_show,
+	.store	= adafs_ta_store,
+};
+
+static void adafs_ta_release(struct kobject *kobj)
+{
+	complete(&adafs_trace.tr_kobj_unregister);
+}
+
+struct kobj_type adafs_ta_ktype = {
+	.default_attrs	= adafs_trace_attrs,
+	.sysfs_ops		= &adafs_ta_ops,
+	.release		= adafs_ta_release,
+};
+#endif

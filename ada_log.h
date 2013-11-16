@@ -185,7 +185,6 @@ static inline void log_init(struct adafs_log *log, struct kset *kset) {
 
     memset(&log->l_kobj, 0, sizeof(struct kobject));
     log->l_kobj.kset = kset;
-    init_completion(&log->l_kobj_unregister);
 }
 
 static inline struct adafs_log *new_log(struct kset *kset)
@@ -208,9 +207,6 @@ static inline void log_destroy(struct adafs_log *log) {
 	list_for_each_entry_safe(pos, tmp, &log->l_trans, list) {
 		kmem_cache_free(adafs_tran_cachep, pos);
 	}
-
-	kobject_put(&log->l_kobj);
-	wait_for_completion(&log->l_kobj_unregister);
 }
 
 static inline int __log_seal(struct adafs_log *log) {

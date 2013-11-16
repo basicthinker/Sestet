@@ -226,6 +226,8 @@ static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_in
 extern ssize_t adafs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t pos);
 
+extern ssize_t adafs_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
+		unsigned long nr_segs, loff_t pos);
 
 /*
  * Cuts
