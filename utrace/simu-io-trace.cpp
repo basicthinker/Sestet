@@ -1,5 +1,6 @@
 #include <asm-generic/errno-base.h>
 
+#include <stdint.h>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -18,14 +19,19 @@
 
 using namespace std;
 
+struct timeval32 {
+  uint32_t tv_sec;
+  uint32_t tv_usec;
+};
+
 struct te_page {
   char te_type;
   char te_hit;
-  unsigned long te_ino;
-  unsigned long te_pgi;
+  uint32_t te_ino;
+  uint32_t te_pgi;
 };
 
-inline double tv_float(const struct timeval &tv) {
+inline double tv_float(const struct timeval32 &tv) {
   return tv.tv_sec + (double)tv.tv_usec / 1000000;
 }
 
@@ -35,6 +41,7 @@ typedef pair<unsigned long, double> rpoint_t;
 class RCurve {
 public:
   RCurve() {
+    overall = 0;
     stale = 0;
     merged = 0;
   }
@@ -51,8 +58,9 @@ public:
       }
       stale += PAGE_SIZE;
 
+      overall += PAGE_SIZE;
       r = (double)merged / stale;
-      points.push_back(make_pair(stale, r));
+      points.push_back(make_pair(overall, r));
       break;
     case TE_TYPE_EVICT:
       if (log.find(pg) != log.end()) {
@@ -62,11 +70,12 @@ public:
       }
       break;
     defalt:
-      printf("Warning: invalid trace entry type: %c\n", type);
+      fprintf(stderr, "Warning: invalid trace entry type: %c\n", type);
     }
   }
 
   void clearLog() {
+    stale = 0;
     merged = 0;
     log.clear();
   }
@@ -80,6 +89,7 @@ public:
   }
 
 private:
+  unsigned long overall;
   unsigned long stale;
   unsigned long merged;
   set<ipage_t> log;
@@ -88,19 +98,20 @@ private:
 
 int main(int argc, const char *argv[]) {
   if (argc != 3) {
-    printf("Usage: %s TraceFile IntervalSeconds\n", argv[0]);
+    fprintf(stderr, "Usage: %s TraceFile IntervalSeconds\n", argv[0]);
     return -EINVAL;
   }
 
   const char *file_name = argv[1];
   const int int_sec = atoi(argv[2]);
 
-  struct timeval tv;
+  struct timeval32 tv;
   struct te_page page;
   ifstream file(file_name, ios::in | ios::binary);
   if (!file.read((char *)&tv, sizeof(tv)) ||
       !file.read((char *)&page, sizeof(page))) {
-    printf("Error: failed to read in first trace entry.\n");
+    fprintf(stderr, "Error: failed to read in first trace entry.\n");
+    file.close();
     return -EIO;
   }
   const double begin_time = tv_float(tv);
@@ -125,16 +136,27 @@ int main(int argc, const char *argv[]) {
     rc_adafs.input(page.te_type, page.te_ino, page.te_pgi);
 
   }
+  file.close();
 
   if (rc_ext4.size() != rc_adafs.size()) {
-    printf("Error: ext4 point number = %lu, adafs point number = %lu\n",
+    fprintf(stderr, "Error: ext4 point number = %lu, adafs point number = %lu\n",
       rc_ext4.size(), rc_adafs.size());
     return -EFAULT;
   }
 
+  /* Output results */
   list<rpoint_t>::iterator ie = rc_ext4.getPoints().begin();
   list<rpoint_t>::iterator ia = rc_adafs.getPoints().begin();
-  
+
+  for (; ie != rc_ext4.getPoints().end() && ia != rc_adafs.getPoints().end(); ++ie, ++ia) {
+    if (ie->first != ia->first) {
+      fprintf(stderr, "Error: ext4 and AdaFS meet different staleness: %lu, %lu\n", ie->first, ia->first);
+      return -EFAULT;
+    }
+    printf("%f\t%f\t%f\n", (double)ie->first / 1024,
+      ie->second * 100, ia->second * 100);
+  }
+
   return 0;
 }
 
