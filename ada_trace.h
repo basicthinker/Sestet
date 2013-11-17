@@ -23,21 +23,34 @@ struct adafs_trace {
 	struct file *tr_filp;
 	unsigned long long tr_len;
 	struct mutex tr_mtx;
+
+#ifdef ADA_TRACE
+    struct kobject tr_kobj;
+    struct completion tr_kobj_unregister;
+	int tr_on;
+#endif
 };
 
-static inline int adafs_trace_open(struct adafs_trace *trace, const char *filename) {
+static inline int adafs_trace_open(struct adafs_trace *trace,
+		const char *filename, struct kset *kset) {
 #ifdef ADA_TRACE
 	if (strnlen(filename, FNAME_MAX_LEN) == FNAME_MAX_LEN) return -EINVAL;
 	strcpy(trace->tr_name, filename);
+
 	trace->tr_filp = filp_open(filename, O_WRONLY | O_APPEND | O_CREAT, 0644);
-	trace->tr_len = 0;
-	mutex_init(&trace->tr_mtx);
 	if (IS_ERR(trace->tr_filp)) {
 		trace->tr_name[0] = '\0';
 		trace->tr_filp = NULL;
 		return PTR_ERR(trace->tr_filp);
 	}
 	printk(KERN_INFO "[adafs] AdaFS tracing is up.\n");
+
+	trace->tr_len = 0;
+	mutex_init(&trace->tr_mtx);
+	trace->tr_on = 0;
+
+	memset(&trace->tr_kobj, 0, sizeof(struct kobject));
+	trace->tr_kobj.kset = kset;
 #endif
 	return 0;
 }
@@ -94,11 +107,13 @@ struct te_page {
 static inline void adafs_trace_page(struct adafs_trace *trace, char te_type,
 		unsigned long te_ino, unsigned long te_pgi, char te_hit) {
 #ifdef ADA_TRACE
-	struct te_page te = { .te_type = te_type, .te_hit = te_hit,
-			.te_ino = te_ino, .te_pgi = te_pgi };
-	int err = adafs_trace_output(trace, &te, sizeof(te));
-	if (err < 0) {
-		printk(KERN_ERR "[adafs] adafs_trace_output() failed: %d\n", err);
+	if (trace->tr_on) {
+		struct te_page te = { .te_type = te_type, .te_hit = te_hit,
+				.te_ino = te_ino, .te_pgi = te_pgi };
+		int err = adafs_trace_output(trace, &te, sizeof(te));
+		if (err < 0) {
+			printk(KERN_ERR "[adafs] adafs_trace_output() failed: %d\n", err);
+		}
 	}
 #endif
 }
