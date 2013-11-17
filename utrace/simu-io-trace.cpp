@@ -41,20 +41,35 @@ typedef pair<unsigned long, double> rpoint_t;
 class RCurve {
 public:
   RCurve() {
+    num_reads_hit = 0;
+    num_reads_miss = 0;
     overall = 0;
     stale = 0;
     merged = 0;
   }
 
-  void input(char type, unsigned long ino, unsigned long pgi) {
+  void input(char type, unsigned long ino, unsigned long pgi, char hit) {
     ipage_t pg(ino, pgi);
     double r = 0;
     switch (type) {
+    case TE_TYPE_READ:
+      if (hit == TE_HIT_YES) ++num_reads_hit;
+      else if (hit == TE_HIT_NO) ++num_reads_miss;
+      else fprintf(stderr, "Warning: invalid hit status for read: %c\n", hit);
+      break;
     case TE_TYPE_WRITE:
       if (log.find(pg) != log.end()) {
         merged += PAGE_SIZE;
+        if (hit == TE_HIT_NO) {
+          /*fprintf(stderr, "Warning: mismatch of hit: ino=%lu, pgi=%lu, "
+              "hit=%c\n", ino, pgi, hit);*/
+        }
       } else {
         log.insert(pg);
+        if (hit == TE_HIT_YES) {
+          /*fprintf(stderr, "Warning: mismatch of hit: ino=%lu, pgi=%lu, "
+              "hit=%c\n", ino, pgi, hit);*/
+        }
       }
       stale += PAGE_SIZE;
 
@@ -84,11 +99,21 @@ public:
     return points;
   }
 
-  size_t size() {
+  unsigned int numReadsHit() {
+    return num_reads_hit;
+  }
+
+  unsigned int numReadsMiss() {
+    return num_reads_miss;
+  }
+
+  size_t numWrites() {
     return points.size();
   }
 
 private:
+  unsigned int num_reads_hit;
+  unsigned int num_reads_miss;
   unsigned long overall;
   unsigned long stale;
   unsigned long merged;
@@ -120,8 +145,8 @@ int main(int argc, const char *argv[]) {
   RCurve rc_ext4;
   RCurve rc_adafs;
 
-  rc_ext4.input(page.te_type, page.te_ino, page.te_pgi);
-  rc_adafs.input(page.te_type, page.te_ino, page.te_pgi);
+  rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, TE_HIT_UNKNOWN);
+  rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
 
   while (true) {
     if (!file.read((char *)&tv, sizeof(tv)) ||
@@ -132,15 +157,15 @@ int main(int argc, const char *argv[]) {
       rc_ext4.clearLog();
       tran_time += int_sec;
     }
-    rc_ext4.input(page.te_type, page.te_ino, page.te_pgi);
-    rc_adafs.input(page.te_type, page.te_ino, page.te_pgi);
+    rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, TE_HIT_UNKNOWN);
+    rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
 
   }
   file.close();
 
-  if (rc_ext4.size() != rc_adafs.size()) {
+  if (rc_ext4.numWrites() != rc_adafs.numWrites()) {
     fprintf(stderr, "Error: ext4 point number = %lu, adafs point number = %lu\n",
-      rc_ext4.size(), rc_adafs.size());
+      rc_ext4.numWrites(), rc_adafs.numWrites());
     return -EFAULT;
   }
 
@@ -157,6 +182,10 @@ int main(int argc, const char *argv[]) {
       ie->second * 100, ia->second * 100);
   }
 
+  fprintf(stderr, "Ext4: number of hit reads = %u, number of miss reads = %u\n",
+    rc_ext4.numReadsHit(), rc_ext4.numReadsMiss());
+  fprintf(stderr, "AdaFS: number of hit reads = %u, number of miss reads = %u\n",
+    rc_adafs.numReadsHit(), rc_adafs.numReadsMiss());
   return 0;
 }
 
