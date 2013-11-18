@@ -142,19 +142,20 @@ void adafs_put_super_hook(void)
 #ifdef ADA_RELEASE
 	struct adafs_log *log;
 	int i;
-	int done = 1;
-	do {
+	int done = 0;
+	while (!done) {
 		wake_up_process(adafs_flusher);
 		if (wait_for_completion_interruptible(&flush_cmpl) < 0) {
 			printk(KERN_ERR "[adafs] adafs_put_super_hook "
 					"interrupted in waiting for flush_cmpl.\n");
 			return;
 		}
+		done = 1;
 		for (i = 0; i < atomic_read(&num_logs); ++i) {
 			log = adafs_logs[i];
 			if (log->l_begin != log->l_end) done = 0;
 		}
-	} while(!done);
+	}
 #endif
 }
 
@@ -815,6 +816,7 @@ static ssize_t adafs_ta_store(struct kobject *kobj,
 			return -EINVAL;
 
 		adafs_trace.tr_on = req;
+		return len;
 	}
 	return -EINVAL;
 }
