@@ -252,6 +252,6 @@ static inline int adafs_writepage_cut(struct page *page,
 #define adafs_writepages_cut(inode) (S_ISREG((inode)->i_mode))
 
 #define adafs_sync_file_cut(inode) (S_ISREG((inode)->i_mode) ? \
-		printk(KERN_INFO "[adafs] adafs_sync_file_cut at %s\n", __func__), 1 : 0)
+		adafs_trace_page(&adafs_trace, TE_TYPE_FSYNC, (inode)->i_ino, 0, TE_HIT_UNKNOWN), 1 : 0)
 
 #endif /* ADAFS_H_ */

@@ -11,6 +11,7 @@
 
 #define TE_TYPE_READ  'r'
 #define TE_TYPE_WRITE 'w'
+#define TE_TYPE_FSYNC 's'
 #define TE_TYPE_EVICT 'e'
 
 #define TE_HIT_YES     'y'
@@ -77,6 +78,13 @@ public:
       r = (double)merged / stale;
       points.push_back(make_pair(overall, r));
       break;
+    case TE_TYPE_FSYNC:
+      if (pgi != 0) {
+        fprintf(stderr, "Warning: integrity check fails: fsync entry has non-zero page index.\n");
+        return;
+      }
+      fsyncs.push_back(overall);
+      break;
     case TE_TYPE_EVICT:
       if (log.find(pg) != log.end()) {
         log.erase(pg);
@@ -99,6 +107,10 @@ public:
     return points;
   }
 
+  list<unsigned long> &getFsyncs() {
+    return fsyncs;
+  }
+
   unsigned int numReadsHit() {
     return num_reads_hit;
   }
@@ -119,24 +131,34 @@ private:
   unsigned long merged;
   set<ipage_t> log;
   list<rpoint_t> points;
+  list<unsigned long> fsyncs;
 };
 
 int main(int argc, const char *argv[]) {
-  if (argc != 3) {
-    fprintf(stderr, "Usage: %s TraceFile IntervalSeconds\n", argv[0]);
+  if (argc != 5) {
+    fprintf(stderr, "Usage: %s TraceFile IntervalSeconds CurvesFile FsyncsFile\n", argv[0]);
     return -EINVAL;
   }
 
-  const char *file_name = argv[1];
+  const char *trace_fname = argv[1];
   const int int_sec = atoi(argv[2]);
+  const char *curves_fname = argv[3];
+  const char *fsyncs_fname = argv[4];
+
+  FILE *curves_fp = fopen(curves_fname, "w+");
+  FILE *fsyncs_fp = fopen(fsyncs_fname, "w+");
+  if (!curves_fp || !fsyncs_fp) {
+    fprintf(stderr, "Error: failed to open output files: curves_fp=%p, fsyncs_fp=%p\n", curves_fp, fsyncs_fp);
+    return -EIO;
+  }
 
   struct timeval32 tv;
   struct te_page page;
-  ifstream file(file_name, ios::in | ios::binary);
-  if (!file.read((char *)&tv, sizeof(tv)) ||
-      !file.read((char *)&page, sizeof(page))) {
+  ifstream trace_file(trace_fname, ios::in | ios::binary);
+  if (!trace_file.read((char *)&tv, sizeof(tv)) ||
+      !trace_file.read((char *)&page, sizeof(page))) {
     fprintf(stderr, "Error: failed to read in first trace entry.\n");
-    file.close();
+    trace_file.close();
     return -EIO;
   }
   const double begin_time = tv_float(tv);
@@ -149,8 +171,8 @@ int main(int argc, const char *argv[]) {
   rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
 
   while (true) {
-    if (!file.read((char *)&tv, sizeof(tv)) ||
-        !file.read((char *)&page, sizeof(page)))
+    if (!trace_file.read((char *)&tv, sizeof(tv)) ||
+        !trace_file.read((char *)&page, sizeof(page)))
       break;
 
     if (tv_float(tv) - begin_time > tran_time) {
@@ -161,7 +183,7 @@ int main(int argc, const char *argv[]) {
     rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
 
   }
-  file.close();
+  trace_file.close();
 
   if (rc_ext4.numWrites() != rc_adafs.numWrites()) {
     fprintf(stderr, "Error: ext4 point number = %lu, adafs point number = %lu\n",
@@ -173,12 +195,14 @@ int main(int argc, const char *argv[]) {
   list<rpoint_t>::iterator ie = rc_ext4.getPoints().begin();
   list<rpoint_t>::iterator ia = rc_adafs.getPoints().begin();
 
-  for (; ie != rc_ext4.getPoints().end() && ia != rc_adafs.getPoints().end(); ++ie, ++ia) {
+  for (; ie != rc_ext4.getPoints().end() && ia != rc_adafs.getPoints().end();
+      ++ie, ++ia) {
     if (ie->first != ia->first) {
-      fprintf(stderr, "Error: ext4 and AdaFS meet different staleness: %lu, %lu\n", ie->first, ia->first);
+      fprintf(stderr, "Error: ext4 and AdaFS meet different staleness: "
+          "%lu, %lu\n", ie->first, ia->first);
       return -EFAULT;
     }
-    printf("%f\t%f\t%f\n", (double)ie->first / 1024,
+    fprintf(curves_fp, "%f\t%f\t%f\n", (double)ie->first / 1024,
       ie->second * 100, ia->second * 100);
   }
 
@@ -186,6 +210,18 @@ int main(int argc, const char *argv[]) {
     rc_ext4.numReadsHit(), rc_ext4.numReadsMiss());
   fprintf(stderr, "AdaFS: number of hit reads = %u, number of miss reads = %u\n",
     rc_adafs.numReadsHit(), rc_adafs.numReadsMiss());
+
+  if (rc_ext4.getFsyncs().size() != rc_adafs.getFsyncs().size()) {
+    fprintf(stderr, "Error: Ext4 and AdaFS extracts different numbers of fsyncs: %lu, %lu\n", rc_ext4.getFsyncs().size(), rc_adafs.getFsyncs().size());
+  } else {
+    for (list<unsigned long>::iterator it = rc_ext4.getFsyncs().begin();
+        it != rc_ext4.getFsyncs().end(); ++it) {
+      fprintf(fsyncs_fp, "%lu\n", *it);
+    }
+  }
+
+  fclose(curves_fp);
+  fclose(fsyncs_fp);
   return 0;
 }
 

@@ -91,6 +91,7 @@ static inline int adafs_trace_output(struct adafs_trace *trace,
 
 #define TE_TYPE_READ  'r'
 #define TE_TYPE_WRITE 'w'
+#define TE_TYPE_FSYNC 's'
 #define TE_TYPE_EVICT 'e'
 
 #define TE_HIT_YES     'y'
