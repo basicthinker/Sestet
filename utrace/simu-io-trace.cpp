@@ -44,46 +44,40 @@ public:
   RCurve() {
     num_reads_hit = 0;
     num_reads_miss = 0;
-    overall = 0;
     stale = 0;
     merged = 0;
   }
 
-  void input(char type, unsigned long ino, unsigned long pgi, char hit) {
+  void input(char type, unsigned long ino, unsigned long pgi, char hit, int to_fsync) {
     ipage_t pg(ino, pgi);
     double r = 0;
+
     switch (type) {
     case TE_TYPE_READ:
-      if (hit == TE_HIT_YES) ++num_reads_hit;
-      else if (hit == TE_HIT_NO) ++num_reads_miss;
-      else fprintf(stderr, "Warning: invalid hit status for read: %c\n", hit);
+      if (log.find(pg) != log.end()) ++num_reads_hit;
+      else ++num_reads_miss;
       break;
     case TE_TYPE_WRITE:
       if (log.find(pg) != log.end()) {
         merged += PAGE_SIZE;
-        if (hit == TE_HIT_NO) {
-          /*fprintf(stderr, "Warning: mismatch of hit: ino=%lu, pgi=%lu, "
-              "hit=%c\n", ino, pgi, hit);*/
-        }
       } else {
         log.insert(pg);
-        if (hit == TE_HIT_YES) {
-          /*fprintf(stderr, "Warning: mismatch of hit: ino=%lu, pgi=%lu, "
-              "hit=%c\n", ino, pgi, hit);*/
-        }
       }
       stale += PAGE_SIZE;
 
-      overall += PAGE_SIZE;
       r = (double)merged / stale;
-      points.push_back(make_pair(overall, r));
+      points.push_back(make_pair(stale, r));
       break;
     case TE_TYPE_FSYNC:
       if (pgi != 0) {
         fprintf(stderr, "Warning: integrity check fails: fsync entry has non-zero page index.\n");
         return;
+      } else if (!to_fsync) break;
+      for (set<ipage_t>::iterator it = log.begin(); it != log.end(); ) {
+        if (it->first == ino) log.erase(it++);
+        else ++it;
       }
-      fsyncs.push_back(overall);
+      fsyncs.push_back(stale);
       break;
     case TE_TYPE_EVICT:
       if (log.find(pg) != log.end()) {
@@ -98,8 +92,6 @@ public:
   }
 
   void clearLog() {
-    stale = 0;
-    merged = 0;
     log.clear();
   }
 
@@ -119,14 +111,9 @@ public:
     return num_reads_miss;
   }
 
-  size_t numWrites() {
-    return points.size();
-  }
-
 private:
   unsigned int num_reads_hit;
   unsigned int num_reads_miss;
-  unsigned long overall;
   unsigned long stale;
   unsigned long merged;
   set<ipage_t> log;
@@ -167,8 +154,8 @@ int main(int argc, const char *argv[]) {
   RCurve rc_ext4;
   RCurve rc_adafs;
 
-  rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, TE_HIT_UNKNOWN);
-  rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
+  rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit, 1);
+  rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit, 0);
 
   while (true) {
     if (!trace_file.read((char *)&tv, sizeof(tv)) ||
@@ -179,15 +166,15 @@ int main(int argc, const char *argv[]) {
       rc_ext4.clearLog();
       tran_time += int_sec;
     }
-    rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, TE_HIT_UNKNOWN);
-    rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit);
+    rc_ext4.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit, 1);
+    rc_adafs.input(page.te_type, page.te_ino, page.te_pgi, page.te_hit, 0);
 
   }
   trace_file.close();
 
-  if (rc_ext4.numWrites() != rc_adafs.numWrites()) {
+  if (rc_ext4.getPoints().size() != rc_adafs.getPoints().size()) {
     fprintf(stderr, "Error: ext4 point number = %lu, adafs point number = %lu\n",
-      rc_ext4.numWrites(), rc_adafs.numWrites());
+      rc_ext4.getPoints().size(), rc_adafs.getPoints().size());
     return -EFAULT;
   }
 
@@ -206,17 +193,20 @@ int main(int argc, const char *argv[]) {
       ie->second * 100, ia->second * 100);
   }
 
-  fprintf(stderr, "Ext4: number of hit reads = %u, number of miss reads = %u\n",
+  fprintf(stderr, "%s:\n", trace_fname);
+  fprintf(stderr, "\tExt4 reads: number of hits = %u, number of misses = %u\n",
     rc_ext4.numReadsHit(), rc_ext4.numReadsMiss());
-  fprintf(stderr, "AdaFS: number of hit reads = %u, number of miss reads = %u\n",
+  fprintf(stderr, "\tAdaFS reads: number of hits = %u, number of misses = %u\n",
     rc_adafs.numReadsHit(), rc_adafs.numReadsMiss());
 
-  if (rc_ext4.getFsyncs().size() != rc_adafs.getFsyncs().size()) {
-    fprintf(stderr, "Error: Ext4 and AdaFS extracts different numbers of fsyncs: %lu, %lu\n", rc_ext4.getFsyncs().size(), rc_adafs.getFsyncs().size());
+  if (rc_adafs.getFsyncs().size() != 0) {
+    fprintf(stderr, "Error: AdaFS invokes fsyncs: %lu\n",
+        rc_adafs.getFsyncs().size());
   } else {
     for (list<unsigned long>::iterator it = rc_ext4.getFsyncs().begin();
         it != rc_ext4.getFsyncs().end(); ++it) {
-      fprintf(fsyncs_fp, "%lu\n", *it);
+      fprintf(fsyncs_fp, "%f\t%d\n", (double)*it / 1024, 50);
+          // for gnuplot, y=50 locates at mid
     }
   }
 
