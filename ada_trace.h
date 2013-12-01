@@ -25,8 +25,8 @@ struct adafs_trace {
 	struct mutex tr_mtx;
 
 #ifdef ADA_TRACE
-    struct kobject tr_kobj;
-    struct completion tr_kobj_unregister;
+	struct kobject tr_kobj;
+	struct completion tr_kobj_unregister;
 	int tr_on;
 #endif
 };

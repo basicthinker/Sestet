@@ -46,6 +46,7 @@ extern void adafs_put_super_hook(void);
 
 static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_inode, int mode)
 {
+#ifndef ADA_DISABLE
 	if (dir) {
 		new_inode->i_private = dir->i_private;
 		ADAFS_DEBUG(KERN_INFO "[adafs] new_inode_hook(): dir_ino=%lu, new_ino=%lu, log(%lu)\n",
@@ -66,12 +67,14 @@ static inline void adafs_new_inode_hook(struct inode *dir, struct inode *new_ino
 			}
 		}
 	}
+#endif /* ADA_DISABLE */ 
 }
 
 static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 		struct page* page)
 {
-	struct rlog *rl;
+	struct rlog *rl = NULL;
+#ifndef ADA_DISABLE
 	unsigned int li = (unsigned int)(long)host->i_private;
 	struct adafs_log *log = adafs_logs[li];
 
@@ -80,10 +83,10 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 	rl = find_rlog(page_rlog, page);
 
 	if (!rl) { // new page
-        rl = rlog_malloc();
-        assoc_rlog(rl, page, L_NULL, page_rlog);
+		rl = rlog_malloc();
+		assoc_rlog(rl, page, L_NULL, page_rlog);
 #ifdef DEBUG_PRP
-        printk(KERN_DEBUG "[adafs] NP 1: %p\n", rl_page(rl));
+		printk(KERN_DEBUG "[adafs] NP 1: %p\n", rl_page(rl));
 #endif
 	} else if (seq_less(rl_enti(rl), log->l_head)) { // COW
 		struct page *cpage = page_cache_alloc_cold(&host->i_data);
@@ -115,13 +118,14 @@ static inline struct rlog *adafs_try_assoc_rlog(struct inode *host,
 #ifdef DEBUG_PRP
 	else printk(KERN_DEBUG "[adafs] AP 1: %p - %u - %u\n", rl_page(rl), rl_enti(rl), log->l_head);
 #endif
-
+#endif /* ADA_DISABLE */
 	return rl;
 }
 
 static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		unsigned long offset, unsigned long copied)
 {
+#ifndef ADA_DISABLE
 	unsigned int li = (unsigned int)(long)host->i_private;
 	struct adafs_log *log = adafs_logs[li];
 
@@ -165,23 +169,25 @@ static inline int adafs_try_append_log(struct inode *host, struct rlog* rl,
 		on_write_new_page(log, copied);
 		return TE_HIT_NO;
 	}
+#else
+	return -1;
+#endif /* ADA_DISABLE */
 }
 
 // Put before truncate and free related pages
 static inline void adafs_truncate_hook(struct inode *inode,
-		loff_t lstart, loff_t lend)
-{
-	struct adafs_log *log = adafs_logs[(long)inode->i_private];
+		const loff_t lstart, const loff_t lend)
+{	
+	const pgoff_t start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	//BUG_ON((lend & (PAGE_CACHE_SIZE - 1)) != (PAGE_CACHE_SIZE - 1));
+	const pgoff_t end = (lend >> PAGE_CACHE_SHIFT);
 	unsigned int i;
-	pgoff_t start, end;
+#ifndef ADA_DISABLE
+	struct adafs_log *log = adafs_logs[(long)inode->i_private];
 	struct log_entry *le;
 
 	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_truncate_hook() for ino=%lu, start=%lu, end=%lu\n",
 			inode->i_ino, (unsigned long)lstart, (unsigned long)lend);
-
-	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
-	//BUG_ON((lend & (PAGE_CACHE_SIZE - 1)) != (PAGE_CACHE_SIZE - 1));
-	end = (lend >> PAGE_CACHE_SHIFT);
 
 	mutex_lock(&log->l_fmutex);
 	for (i = log->l_end - 1;
@@ -198,25 +204,31 @@ static inline void adafs_truncate_hook(struct inode *inode,
 			le_set_inval(le);
 			evict_entry(le, page_rlog);
 			on_evict_page(log, le_len(le));
-			adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, le_pgi(le), TE_HIT_UNKNOWN);
 		}
 	}
 	mutex_unlock(&log->l_fmutex);
+#endif /* ADA_DISABLE */
+	for (i = start; i <= end; ++i)
+		adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, i, TE_HIT_UNKNOWN);
 }
 
 // Put before freeing in-mapping pages
 static inline void adafs_evict_inode_hook(struct inode *inode)
 {
+#ifndef ADA_DISABLE
 	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_evict_inode_hook() for ino=%lu\n", inode->i_ino);
 
 	adafs_truncate_hook(inode, 0, (loff_t)-1);
+#endif /* ADA_DISABLE */
 }
 
 static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_inode)
 {
+#ifndef ADA_DISABLE
 	old_inode->i_private = new_dir->i_private;
 	ADAFS_DEBUG(KERN_INFO "[adafs] rename_hook(): %lu->%lu to %lu\n",
 			new_dir->i_ino, (unsigned long)new_dir->i_private, old_inode->i_ino);
+#endif
 }
 
 /* Replacements */
@@ -238,20 +250,30 @@ extern ssize_t adafs_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 static inline int adafs_writepage_cut(struct page *page,
 		struct writeback_control *wbc)
 {
-	struct inode *inode = page->mapping->host;
 	int ret = 0;
+#ifndef ADA_DISABLE
+	struct inode *inode = page->mapping->host;
 	if (S_ISREG(inode->i_mode)) {
 		/* Set the page dirty again, unlock */
 		redirty_page_for_writepage(wbc, page);
 		unlock_page(page);
 		ret = 1;
 	}
+#endif /* ADA_DISABLE */
 	return ret;
 }
 
+#ifndef ADA_DISABLE
 #define adafs_writepages_cut(inode) (S_ISREG((inode)->i_mode))
+#else
+#define adafs_writepages_cut(inode) (0)
+#endif
 
+#ifndef ADA_DISABLE
 #define adafs_sync_file_cut(inode) (S_ISREG((inode)->i_mode) ? \
 		adafs_trace_page(&adafs_trace, TE_TYPE_FSYNC, (inode)->i_ino, 0, TE_HIT_UNKNOWN), 1 : 0)
+#else
+#define adafs_sync_file_cut(inode) (adafs_trace_page(&adafs_trace, TE_TYPE_FSYNC, (inode)->i_ino, 0, TE_HIT_UNKNOWN), 0)
+#endif
 
 #endif /* ADAFS_H_ */

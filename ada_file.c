@@ -58,7 +58,7 @@ int adafs_flush(void *data)
 int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 {
 	int err;
-
+#ifndef ADA_DISABLE
 	adafs_rlog_cachep = kmem_cache_create("adafs_rlog_cache", sizeof(struct rlog),
 			0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	adafs_tran_cachep = kmem_cache_create("adafs_tran_cachep", sizeof(struct transaction),
@@ -84,20 +84,20 @@ int adafs_init_hook(const struct flush_operations *fops, struct kset *kset)
 		printk(KERN_ERR "[adafs] kthread_run() failed: %ld\n", PTR_ERR(adafs_flusher));
 		return PTR_ERR(adafs_flusher);
 	}
-
+#endif /* ADA_DISABLE */
+#ifdef ADA_TRACE
 	err = adafs_trace_open(&adafs_trace, TRACE_FILE_PATH, kset);
 	if (err) printk(KERN_ERR "[adafs] adafs_trace_open() failed: %d\n", err);
-
-#ifdef ADA_TRACE
 	err = kobject_init_and_add(&adafs_trace.tr_kobj, &adafs_ta_ktype, NULL, "trace");
 	if (err) printk(KERN_ERR "[adafs] kobject_init_and_add() failed for trace\n");
 	else init_completion(&adafs_trace.tr_kobj_unregister);
-#endif
+#endif /* ADA_TRACE */
 	return 0;
 }
 
 void adafs_exit_hook(void)
 {
+#ifndef ADA_DISABLE
 	int i, j;
 	struct sht_list *sl;
 	struct hlist_head *hl;
@@ -131,7 +131,7 @@ void adafs_exit_hook(void)
 		kfree(adafs_logs[i]);
 	}
 	kmem_cache_destroy(adafs_tran_cachep);
-
+#endif
 	adafs_trace_close(&adafs_trace);
 	kobject_put(&adafs_trace.tr_kobj);
 	wait_for_completion(&adafs_trace.tr_kobj_unregister);
