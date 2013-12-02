@@ -208,18 +208,44 @@ static inline void adafs_truncate_hook(struct inode *inode,
 	}
 	mutex_unlock(&log->l_fmutex);
 #endif /* ADA_DISABLE */
-	for (i = start; i <= end; ++i)
-		adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, i, TE_HIT_UNKNOWN);
+	{
+		struct pagevec pvec;
+		pgoff_t next;
+		pgoff_t i_end = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+		pgoff_t mid = (end < i_end) ? end + 1 : i_end;
+		for (i = start; i < mid; ++i) {
+				adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, i, TE_HIT_UNKNOWN);
+		}
+		pagevec_init(&pvec, 0);
+                next = mid;
+		while (next <= end &&
+			pagevec_lookup(&pvec, inode->i_mapping, next, PAGEVEC_SIZE)) {
+			for (i = 0; i < pagevec_count(&pvec); ++i) {
+				struct page *page = pvec.pages[i];
+				pgoff_t page_index = page->index;
+
+				if (page_index > end) {
+					next = page_index;
+					break;
+				}
+
+				if (page_index > next)
+					next = page_index;
+				next++;
+
+				adafs_trace_page(&adafs_trace, TE_TYPE_EVICT, inode->i_ino, page_index, TE_HIT_UNKNOWN);
+			}
+			pagevec_release(&pvec);
+		}
+	}
 }
 
 // Put before freeing in-mapping pages
 static inline void adafs_evict_inode_hook(struct inode *inode)
 {
-#ifndef ADA_DISABLE
 	ADAFS_DEBUG(KERN_INFO "[adafs] adafs_evict_inode_hook() for ino=%lu\n", inode->i_ino);
 
-	adafs_truncate_hook(inode, 0, (loff_t)-1);
-#endif /* ADA_DISABLE */
+	adafs_truncate_hook(inode, 0, inode->i_size);
 }
 
 static inline void adafs_rename_hook(struct inode *new_dir, struct inode *old_inode)
