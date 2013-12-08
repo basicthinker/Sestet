@@ -133,8 +133,10 @@ void adafs_exit_hook(void)
 	kmem_cache_destroy(adafs_tran_cachep);
 #endif
 	adafs_trace_close(&adafs_trace);
+#ifdef ADA_TRACE
 	kobject_put(&adafs_trace.tr_kobj);
 	wait_for_completion(&adafs_trace.tr_kobj_unregister);
+#endif
 }
 
 void adafs_put_super_hook(void)
